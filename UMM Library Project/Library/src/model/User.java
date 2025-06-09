@@ -6,9 +6,6 @@ public class User {
     private String password;
     private String dateOfBirth;
 
-    public User(String email, String password) {
-    }
-
     // Constructor, getters, setters
     public String getName() {
         return name;
