@@ -33,9 +33,10 @@ public class RegisterPage {
         title.setFont(FontLoader.loadPoppins(24));
         title.setFill(Theme.isDarkMode ? Color.WHITE : Color.BLACK);
 
-
+        // Back to Login
         Hyperlink loginLink = new Hyperlink("Already Registered? Login");
         loginLink.setFont(FontLoader.loadPoppins(12));
+        loginLink.setStyle("-fx-text-fill: " + (Theme.isDarkMode ? "white;" : "black;"));
 
         // Name
         Label nameLabel = new Label("NAME");
@@ -122,7 +123,7 @@ public class RegisterPage {
             fadeOut.play();
         });
 
-        // Event: submit (nanti bisa dipakai simpan user)
+        // Event: submit
         signupButton.setOnAction(e -> {
             String name = nameField.getText();
             String email = emailField.getText();
