@@ -33,7 +33,7 @@ public class ForgotPassword {
         title.setFont(FontLoader.loadPoppins(24));
         title.setFill(Theme.isDarkMode ? Color.WHITE : Color.BLACK);
 
-        Label instruction = new Label("Enter your registered email to reset password");
+        Label instruction = new Label("Enter your email to reset password");
         instruction.setFont(FontLoader.loadPoppins(12));
         instruction.setTextFill(Theme.isDarkMode ? Color.WHITE : Color.BLACK);
 
@@ -63,6 +63,7 @@ public class ForgotPassword {
         // Back to login
         Hyperlink backToLogin = new Hyperlink("Back to Login");
         backToLogin.setFont(FontLoader.loadPoppins(11));
+        backToLogin.setStyle("-fx-text-fill: " + (Theme.isDarkMode ? "white;" : "black;"));
 
         // Layout
         VBox formBox = new VBox(10,
