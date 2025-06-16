@@ -25,22 +25,21 @@ public class AuthenticationFilter extends OncePerRequestFilter {
             return;
         }
 
-        String header = request.getHeader("Authorization");
-        System.out.println(header);
-
-        if(header == null || !header.startsWith("Bearer ")){
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setCharacterEncoding("UTF-8");
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write(
-                    new ObjectMapper().writeValueAsString(
-                            Map.of("status", 401, "message", "Unauthorized")
-                    )
-            );
-            return;
-        }
-
-        String token = header.substring(7);
+//        String header = request.getHeader("Authorization");
+//
+//        if(header == null || !header.startsWith("Bearer ")){
+//            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+//            response.setCharacterEncoding("UTF-8");
+//            response.setContentType("application/json;charset=UTF-8");
+//            response.getWriter().write(
+//                    new ObjectMapper().writeValueAsString(
+//                            Map.of("status", 401, "message", "Unauthorized")
+//                    )
+//            );
+//            return;
+//        }
+//
+//        String token = header.substring(7);
         filterChain.doFilter(request, response);
     }
 }
