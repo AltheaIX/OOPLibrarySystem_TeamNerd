@@ -24,18 +24,18 @@ public class AuthServiceImpl implements AuthService {
         this.authRepositoryImpl = authRepositoryImpl;
     }
 
-    public boolean Login(LoginRequest loginRequest) {
+    public UsersEntity Login(LoginRequest loginRequest) {
         Optional<UsersEntity> checkLogin = authRepositoryImpl.findByEmail(loginRequest.getEmail());
         if (checkLogin.isEmpty()) {
-            return false;
+            return null;
         }
 
         UsersEntity user = checkLogin.get();
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
-            return false;
+            return null;
         }
 
-        return true;
+        return user;
     }
 
     public void Register(RegisterRequest registerRequest) {

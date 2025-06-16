@@ -2,6 +2,7 @@ package com.example.umm_library_backend.controller;
 
 import com.example.umm_library_backend.dto.auth.*;
 import com.example.umm_library_backend.model.AuthModel;
+import com.example.umm_library_backend.model.UsersEntity;
 import com.example.umm_library_backend.service.AuthServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -28,12 +29,12 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new LoginResponse<>(400, "Bad request"));
         }
 
-        boolean checkLogin = authServiceImpl.Login(loginRequest);
-        if(!checkLogin) {
+        UsersEntity user = authServiceImpl.Login(loginRequest);
+        if(user == null) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new LoginResponse<>(401, "Invalid email or password"));
         }
 
-        AuthModel data = new AuthModel("Test_access_token");
+        AuthModel data = new AuthModel(user.getId(), user.getFullName(), user.getRole());
         return ResponseEntity.status(HttpStatus.OK).body(new LoginResponse<>(200, data));
     }
 

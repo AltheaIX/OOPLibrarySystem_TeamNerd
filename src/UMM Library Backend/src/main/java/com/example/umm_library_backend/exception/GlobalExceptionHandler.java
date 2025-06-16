@@ -15,6 +15,13 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(DataNotExistsException.class)
+    public ResponseEntity<?> handleDataNotExists(DataNotExistsException e) {
+        return ResponseEntity.badRequest().body(
+                Map.of("status", 400, "message", e.getMessage())
+        );
+    }
+
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<?> handleUnauthorized(UnauthorizedException e) {
         return ResponseEntity.badRequest().body(
