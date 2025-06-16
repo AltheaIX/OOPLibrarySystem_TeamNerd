@@ -22,6 +22,10 @@ import javafx.stage.Stage;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 
+//library icon awesome jangan lupa add di project structure, ada di resource root
+import org.kordamp.ikonli.javafx.FontIcon;
+import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+
 public class DashboardAdmin {
     private BorderPane root;
     private VBox sidebar;
@@ -110,16 +114,17 @@ public class DashboardAdmin {
         box.setPadding(new Insets(40, 24, 40, 24));
         box.setPrefWidth(220);
 
-        Button dashboardBtn = createNavButton("🏠 Dashboard", this::loadDashboardContent);
-        Button booksBtn = createNavButton("📚 Books", this::loadBooksContent);
-        Button usersBtn = createNavButton("👥 Users", this::loadUsersContent);
-        Button transactionsBtn = createNavButton("📋 Transactions", this::loadTransactionsContent);
-        Button reportsBtn = createNavButton("📊 Reports", this::loadReportsContent);
-        Button settingsBtn = createNavButton("⚙️ Settings", this::loadSettingsContent);
-        Button logoutBtn = createNavButton("🚪 Logout", () -> {
+        Button dashboardBtn = createNavButton("Dashboard", FontAwesomeSolid.HOME, this::loadDashboardContent);
+        Button booksBtn = createNavButton("Books", FontAwesomeSolid.BOOK, this::loadBooksContent);
+        Button usersBtn = createNavButton("Users", FontAwesomeSolid.USERS, this::loadUsersContent);
+        Button transactionsBtn = createNavButton("Transactions", FontAwesomeSolid.FILE_ALT, this::loadTransactionsContent);
+        Button reportsBtn = createNavButton("Reports", FontAwesomeSolid.CHART_BAR, this::loadReportsContent);
+        Button settingsBtn = createNavButton("Settings", FontAwesomeSolid.COG, this::loadSettingsContent);
+        Button logoutBtn = createNavButton("Logout", FontAwesomeSolid.SIGN_OUT_ALT, () -> {
             LoginPage loginPage = new LoginPage(stage);
             stage.setScene(new Scene(loginPage.getView(), 400, 600));
         });
+
 
         box.getChildren().addAll(dashboardBtn, booksBtn, usersBtn, transactionsBtn, reportsBtn, settingsBtn, logoutBtn);
         updateSidebarStyles(box);
@@ -134,33 +139,36 @@ public class DashboardAdmin {
         }
     }
 
-    private Button createNavButton(String text, Runnable onClick) {
-        Button btn = new Button(text);
-        btn.setFont(FontLoader.loadPoppins(16));
+    private Button createNavButton(String label, FontAwesomeSolid iconType, Runnable onClick) {
+        // Buat ikon
+        FontIcon icon = new FontIcon(iconType);
+        icon.setIconSize(18);
+
+        // Set warna ikon sesuai tema
+        if (Theme.isDarkMode) {
+            icon.setIconColor(Color.web("#ffffff")); // putih untuk dark mode
+        } else {
+            icon.setIconColor(Color.web("#333333")); // abu gelap untuk light mode
+        }
+
+        // Buat label
+        Label textLabel = new Label(label);
+        textLabel.setFont(FontLoader.loadPoppins(14));
+        textLabel.setTextFill(Theme.isDarkMode ? Color.WHITE : Color.web("#333"));
+
+        HBox content = new HBox(10, icon, textLabel);
+        content.setAlignment(Pos.CENTER_LEFT);
+
+        Button btn = new Button();
+        btn.setGraphic(content);
         btn.setMaxWidth(Double.MAX_VALUE);
         btn.setAlignment(Pos.CENTER_LEFT);
-        updateNavButtonStyle(btn, false);
-        btn.setOnMouseEntered(e -> updateNavButtonStyle(btn, true));
-        btn.setOnMouseExited(e -> updateNavButtonStyle(btn, false));
+        btn.setStyle("-fx-background-color: transparent; -fx-cursor: hand;");
         btn.setOnAction(e -> onClick.run());
+
         return btn;
     }
 
-    private void updateNavButtonStyle(Button btn, boolean hover) {
-        if (Theme.isDarkMode) {
-            if (hover) {
-                btn.setStyle("-fx-background-color: #5750de; -fx-text-fill: white; -fx-padding: 10 20; -fx-background-radius: 8; -fx-cursor: hand;");
-            } else {
-                btn.setStyle("-fx-background-color: transparent; -fx-text-fill: #d1d5db; -fx-padding: 10 20; -fx-background-radius: 8;");
-            }
-        } else {
-            if (hover) {
-                btn.setStyle("-fx-background-color: #4338ca; -fx-text-fill: white; -fx-padding: 10 20; -fx-background-radius: 8; -fx-cursor: hand;");
-            } else {
-                btn.setStyle("-fx-background-color: transparent; -fx-text-fill: #374151; -fx-padding: 10 20; -fx-background-radius: 8;");
-            }
-        }
-    }
 
     // === DASHBOARD CONTENT ===
     private void loadDashboardContent() {
@@ -240,7 +248,7 @@ public class DashboardAdmin {
         return lineChart;
     }
 
-//    dummy pie chart
+    //    dummy pie chart
     private PieChart createGenreChart() {
         ObservableList<PieChart.Data> pieChartData = FXCollections.observableArrayList(
                 new PieChart.Data("Fiction", 45),
@@ -449,6 +457,31 @@ public class DashboardAdmin {
         VBox container = createContentContainer();
         Label title = createTitleLabel("Transactions & Fines");
 
+        // Action buttons with search
+        HBox actionButtons = new HBox(12);
+        actionButtons.setPadding(new Insets(0, 0, 24, 0));
+        actionButtons.setAlignment(Pos.CENTER_LEFT);
+
+        Button addTransactionBtn = createActionButton("+ Add Transaction", this::showAddTransactionDialog);
+        Button refreshBtn = createActionButtonWithIcon("Refresh", FontAwesomeSolid.SYNC_ALT, this::loadTransactionsContent);
+
+        // Search field
+        TextField searchField = new TextField();
+        searchField.setPromptText("Search by User ID...");
+        searchField.setPrefWidth(200);
+        searchField.setStyle(Theme.isDarkMode ?
+                "-fx-background-color: #3c3c3c; -fx-text-fill: white; -fx-prompt-text-fill: #888; -fx-background-radius: 6;" :
+                "-fx-background-color: white; -fx-text-fill: black; -fx-background-radius: 6; -fx-border-color: #d1d5db; -fx-border-radius: 6;");
+
+        Button searchBtn = createActionButtonWithIcon("Search", FontAwesomeSolid.SEARCH, () -> filterTransactionsByUserId(searchField.getText()));
+        Button clearBtn = createActionButton("Clear", () -> {
+            searchField.clear();
+            filterTransactionsByUserId("");
+        });
+
+        actionButtons.getChildren().addAll(addTransactionBtn, refreshBtn,
+                new Label("  "), searchField, searchBtn, clearBtn);
+
         // Fine statistics
         HBox fineStats = new HBox(24);
         fineStats.setPadding(new Insets(0, 0, 32, 0));
@@ -463,16 +496,20 @@ public class DashboardAdmin {
         );
 
         // Transactions table
-        TableView<Transaction> transactionsTable = createTransactionsTable();
+        transactionsTable = createTransactionsTable();
         VBox tableContainer = createTableContainer(transactionsTable);
 
-        container.getChildren().addAll(title, fineStats, tableContainer);
+        container.getChildren().addAll(title, actionButtons, fineStats, tableContainer);
         contentPane.getChildren().setAll(container);
     }
 
+    private TableView<Transaction> transactionsTable;
+    private ObservableList<Transaction> filteredTransactionsData = FXCollections.observableArrayList();
+
     private TableView<Transaction> createTransactionsTable() {
         TableView<Transaction> table = new TableView<>();
-        table.setItems(transactionsData);
+        filteredTransactionsData.setAll(transactionsData);
+        table.setItems(filteredTransactionsData);
         table.setPrefHeight(400);
 
         TableColumn<Transaction, String> idCol = new TableColumn<>("Transaction ID");
@@ -499,6 +536,33 @@ public class DashboardAdmin {
         statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
         statusCol.setPrefWidth(100);
 
+        // Custom cell factory for status column
+        statusCol.setCellFactory(column -> new TableCell<Transaction, String>() {
+            @Override
+            protected void updateItem(String status, boolean empty) {
+                super.updateItem(status, empty);
+                if (empty || status == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(status);
+                    switch (status) {
+                        case "Active":
+                            setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
+                            break;
+                        case "Overdue":
+                            setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+                            break;
+                        case "Returned":
+                            setStyle("-fx-text-fill: #2563eb; -fx-font-weight: bold;");
+                            break;
+                        default:
+                            setStyle("");
+                    }
+                }
+            }
+        });
+
         TableColumn<Transaction, String> fineCol = new TableColumn<>("Fine");
         fineCol.setPrefWidth(100);
         fineCol.setCellFactory(column -> new TableCell<Transaction, String>() {
@@ -523,8 +587,218 @@ public class DashboardAdmin {
             }
         });
 
-        table.getColumns().addAll(idCol, userCol, bookCol, borrowCol, dueCol, statusCol, fineCol);
+        TableColumn<Transaction, Void> actionCol = new TableColumn<>("Actions");
+        actionCol.setPrefWidth(180);
+        actionCol.setCellFactory(param -> new TableCell<>() {
+            private final Button editBtn = new Button("Edit");
+            private final Button deleteBtn = new Button("Delete");
+            private final Button payFineBtn = new Button("Pay Fine");
+            private final HBox buttonsBox = new HBox(5, editBtn, deleteBtn, payFineBtn);
+
+            {
+                editBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4; -fx-font-size: 10;");
+                deleteBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4; -fx-font-size: 10;");
+                payFineBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4; -fx-font-size: 10;");
+
+                editBtn.setOnAction(e -> {
+                    Transaction transaction = getTableView().getItems().get(getIndex());
+                    showEditTransactionDialog(transaction);
+                });
+
+                deleteBtn.setOnAction(e -> {
+                    Transaction transaction = getTableView().getItems().get(getIndex());
+                    showDeleteTransactionConfirmation(transaction);
+                });
+
+                payFineBtn.setOnAction(e -> {
+                    Transaction transaction = getTableView().getItems().get(getIndex());
+                    payFine(transaction);
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    Transaction transaction = getTableView().getItems().get(getIndex());
+                    // Only show Pay Fine button for overdue transactions
+                    if ("Overdue".equals(transaction.getStatus())) {
+                        buttonsBox.getChildren().setAll(editBtn, deleteBtn, payFineBtn);
+                    } else {
+                        buttonsBox.getChildren().setAll(editBtn, deleteBtn);
+                    }
+                    setGraphic(buttonsBox);
+                }
+            }
+        });
+
+        table.getColumns().addAll(idCol, userCol, bookCol, borrowCol, dueCol, statusCol, fineCol, actionCol);
         return table;
+    }
+
+    // Add these new methods:
+    private void filterTransactionsByUserId(String userId) {
+        if (userId == null || userId.trim().isEmpty()) {
+            filteredTransactionsData.setAll(transactionsData);
+        } else {
+            filteredTransactionsData.setAll(
+                    transactionsData.stream()
+                            .filter(t -> t.getUserId().toLowerCase().contains(userId.toLowerCase()))
+                            .collect(java.util.stream.Collectors.toList())
+            );
+        }
+    }
+
+    private void showAddTransactionDialog() {
+        Dialog<Transaction> dialog = new Dialog<>();
+        dialog.setTitle("Add New Transaction");
+        dialog.setHeaderText("Enter transaction details");
+
+        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField userIdField = new TextField();
+        TextField bookIdField = new TextField();
+        DatePicker borrowDatePicker = new DatePicker(LocalDate.now());
+        DatePicker dueDatePicker = new DatePicker(LocalDate.now().plusDays(14));
+        ComboBox<String> statusField = new ComboBox<>();
+        statusField.getItems().addAll("Active", "Overdue", "Returned");
+        statusField.setValue("Active");
+
+        grid.add(new Label("User ID:"), 0, 0);
+        grid.add(userIdField, 1, 0);
+        grid.add(new Label("Book ID:"), 0, 1);
+        grid.add(bookIdField, 1, 1);
+        grid.add(new Label("Borrow Date:"), 0, 2);
+        grid.add(borrowDatePicker, 1, 2);
+        grid.add(new Label("Due Date:"), 0, 3);
+        grid.add(dueDatePicker, 1, 3);
+        grid.add(new Label("Status:"), 0, 4);
+        grid.add(statusField, 1, 4);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == addButtonType) {
+                String newId = "T" + String.format("%03d", transactionsData.size() + 1);
+                return new Transaction(newId, userIdField.getText(), bookIdField.getText(),
+                        borrowDatePicker.getValue(), dueDatePicker.getValue(), statusField.getValue());
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(transaction -> {
+            transactionsData.add(transaction);
+            filteredTransactionsData.setAll(transactionsData);
+            showAlert("Success", "Transaction added successfully!");
+        });
+    }
+
+    private void showEditTransactionDialog(Transaction transaction) {
+        Dialog<Transaction> dialog = new Dialog<>();
+        dialog.setTitle("Edit Transaction");
+        dialog.setHeaderText("Edit transaction details");
+
+        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField userIdField = new TextField(transaction.getUserId());
+        TextField bookIdField = new TextField(transaction.getBookId());
+        DatePicker borrowDatePicker = new DatePicker(transaction.getBorrowDate());
+        DatePicker dueDatePicker = new DatePicker(transaction.getDueDate());
+        ComboBox<String> statusField = new ComboBox<>();
+        statusField.getItems().addAll("Active", "Overdue", "Returned");
+        statusField.setValue(transaction.getStatus());
+
+        grid.add(new Label("User ID:"), 0, 0);
+        grid.add(userIdField, 1, 0);
+        grid.add(new Label("Book ID:"), 0, 1);
+        grid.add(bookIdField, 1, 1);
+        grid.add(new Label("Borrow Date:"), 0, 2);
+        grid.add(borrowDatePicker, 1, 2);
+        grid.add(new Label("Due Date:"), 0, 3);
+        grid.add(dueDatePicker, 1, 3);
+        grid.add(new Label("Status:"), 0, 4);
+        grid.add(statusField, 1, 4);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == saveButtonType) {
+                transaction.setUserId(userIdField.getText());
+                transaction.setBookId(bookIdField.getText());
+                transaction.setBorrowDate(borrowDatePicker.getValue());
+                transaction.setDueDate(dueDatePicker.getValue());
+                transaction.setStatus(statusField.getValue());
+                return transaction;
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(result -> {
+            filteredTransactionsData.setAll(transactionsData);
+            transactionsTable.refresh();
+            showAlert("Success", "Transaction updated successfully!");
+            loadTransactionsContent(); // Refresh to update statistics
+        });
+    }
+
+    private void showDeleteTransactionConfirmation(Transaction transaction) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete Transaction");
+        alert.setHeaderText("Are you sure you want to delete this transaction?");
+        alert.setContentText("Transaction ID: " + transaction.getId() +
+                "\nUser ID: " + transaction.getUserId() +
+                "\nBook ID: " + transaction.getBookId());
+
+        alert.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                transactionsData.remove(transaction);
+                filteredTransactionsData.setAll(transactionsData);
+                showAlert("Success", "Transaction deleted successfully!");
+                loadTransactionsContent(); // Refresh to update statistics
+            }
+        });
+    }
+
+    private void payFine(Transaction transaction) {
+        if (!"Overdue".equals(transaction.getStatus())) {
+            showAlert("Information", "This transaction doesn't have any fine to pay.");
+            return;
+        }
+
+        long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - transaction.getDueDate().toEpochDay());
+        long fine = daysOverdue * 500;
+
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Pay Fine");
+        alert.setHeaderText("Confirm fine payment");
+        alert.setContentText("Transaction ID: " + transaction.getId() +
+                "\nFine Amount: Rp " + String.format("%,d", fine) +
+                "\nDays Overdue: " + daysOverdue +
+                "\n\nMark this fine as paid?");
+
+        alert.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                // Change status to "Returned" to indicate fine is paid
+                transaction.setStatus("Returned");
+                transactionsTable.refresh();
+                showAlert("Success", "Fine payment recorded successfully!\nTransaction status updated to 'Returned'.");
+                loadTransactionsContent(); // Refresh to update statistics
+            }
+        });
     }
 
     // === REPORTS PAGE ===
@@ -532,23 +806,35 @@ public class DashboardAdmin {
         VBox container = createContentContainer();
         Label title = createTitleLabel("Reports & Analytics");
 
-        // Quick stats
-        HBox quickStats = new HBox(20);
-        quickStats.setPadding(new Insets(0, 0, 32, 0));
-        quickStats.getChildren().addAll(
-                createMiniStatCard("Daily Visitors", "45"),
-                createMiniStatCard("Books Added This Month", "23"),
-                createMiniStatCard("New Users This Month", "12"),
-                createMiniStatCard("System Uptime", "99.9%")
+        HBox chartStats = new HBox(24);
+        chartStats.setPadding(new Insets(0, 0, 32, 0));
+
+        //data static yang sama
+        int[] visitorData = {45, 52, 38, 61, 43, 55, 47, 39, 58, 44, 50, 42, 56, 49, 53, 41, 48, 59, 46, 51, 40, 57, 43, 54, 48, 45, 52, 47, 49, 55};
+        int[] borrowData = {12, 15, 9, 18, 11, 16, 13, 8, 17, 10, 14, 12, 19, 13, 15, 11, 12, 16, 14, 13, 9, 18, 11, 15, 12, 13, 16, 14, 13, 17};
+
+        int totalVisitors = 0;
+        int totalBorrows = 0;
+
+        for (int i = 0; i < 30; i++) {
+            totalVisitors += visitorData[i];
+            totalBorrows += borrowData[i];
+        }
+
+        chartStats.getChildren().addAll(
+                createMiniStatCard("Total Visitors", String.valueOf(totalVisitors)),
+                createMiniStatCard("Total Borrows", String.valueOf(totalBorrows))
         );
 
-        // Charts
+        // Charts section
         HBox chartsBox = new HBox(24);
-        VBox chartContainer1 = createChartContainer("Library Activity (Last 30 Days)", createActivityChart());
-        VBox chartContainer2 = createChartContainer("User Activity", createUserActivityChart());
-        chartsBox.getChildren().addAll(chartContainer1, chartContainer2);
+        chartsBox.setPadding(new Insets(0, 0, 40, 0));
 
-        container.getChildren().addAll(title, quickStats, chartsBox);
+        VBox chartContainer1 = createChartContainer("Daily Activity", createActivityChart());
+
+        chartsBox.getChildren().addAll(chartContainer1);
+
+        container.getChildren().addAll(title, chartStats, chartsBox);
         contentPane.getChildren().setAll(container);
     }
 
@@ -567,26 +853,17 @@ public class DashboardAdmin {
         XYChart.Series<Number, Number> borrowSeries = new XYChart.Series<>();
         borrowSeries.setName("Books Borrowed");
 
-        for (int i = 1; i <= 30; i++) {
-            visitorseries.getData().add(new XYChart.Data<>(i, (int)(Math.random() * 50) + 20));
-            borrowSeries.getData().add(new XYChart.Data<>(i, (int)(Math.random() * 15) + 5));
+        // Data tetap tanpa random
+        int[] visitorData = {45, 52, 38, 61, 43, 55, 47, 39, 58, 44, 50, 42, 56, 49, 53, 41, 48, 59, 46, 51, 40, 57, 43, 54, 48, 45, 52, 47, 49, 55};
+        int[] borrowData = {12, 15, 9, 18, 11, 16, 13, 8, 17, 10, 14, 12, 19, 13, 15, 11, 12, 16, 14, 13, 9, 18, 11, 15, 12, 13, 16, 14, 13, 17};
+
+        for (int i = 0; i < 30; i++) {
+            visitorseries.getData().add(new XYChart.Data<>(i + 1, visitorData[i]));
+            borrowSeries.getData().add(new XYChart.Data<>(i + 1, borrowData[i]));
         }
 
         lineChart.getData().addAll(visitorseries, borrowSeries);
         return lineChart;
-    }
-
-    private PieChart createUserActivityChart() {
-        ObservableList<PieChart.Data> pieChartData = FXCollections.observableArrayList(
-                new PieChart.Data("Regular Users", 70),
-                new PieChart.Data("Premium Users", 20),
-                new PieChart.Data("New Users", 10)
-        );
-
-        PieChart pieChart = new PieChart(pieChartData);
-        pieChart.setPrefHeight(300);
-        pieChart.setAnimated(false);
-        return pieChart;
     }
 
     // === SETTINGS PAGE ===
@@ -608,82 +885,52 @@ public class DashboardAdmin {
 
         darkModeToggle.selectedProperty().addListener((obs, wasSelected, isSelected) -> {
             Theme.isDarkMode = isSelected;
-            start((Stage) root.getScene().getWindow());
+            start((Stage) root.getScene().getWindow()); // Reload UI
         });
 
         HBox toggleBox = new HBox(10, darkModeLabel, darkModeToggle);
         toggleBox.setAlignment(Pos.CENTER_LEFT);
 
-        // Library settings
-        VBox librarySettings = new VBox(16);
-        Label libraryTitle = createSectionLabel("Library Settings");
-
-        HBox fineSettingBox = new HBox(10);
-        fineSettingBox.setAlignment(Pos.CENTER_LEFT);
-        Label fineLabel = new Label("Daily Fine Amount:");
-        fineLabel.setFont(FontLoader.loadPoppins(16));
-        fineLabel.setTextFill(Theme.isDarkMode ? Color.web("#d1d5db") : Color.web("#374151"));
-
-        TextField fineField = new TextField("500");
-        fineField.setPrefWidth(100);
-        Label rupiah = new Label("Rupiah");
-        rupiah.setFont(FontLoader.loadPoppins(16));
-        rupiah.setTextFill(Theme.isDarkMode ? Color.web("#d1d5db") : Color.web("#374151"));
-
-        fineSettingBox.getChildren().addAll(fineLabel, fineField, rupiah);
-
-        HBox borrowPeriodBox = new HBox(10);
-        borrowPeriodBox.setAlignment(Pos.CENTER_LEFT);
-        Label periodLabel = new Label("Default Borrow Period:");
-        periodLabel.setFont(FontLoader.loadPoppins(16));
-        periodLabel.setTextFill(Theme.isDarkMode ? Color.web("#d1d5db") : Color.web("#374151"));
-
-        TextField periodField = new TextField("14");
-        periodField.setPrefWidth(100);
-        Label days = new Label("Days");
-        days.setFont(FontLoader.loadPoppins(16));
-        days.setTextFill(Theme.isDarkMode ? Color.web("#d1d5db") : Color.web("#374151"));
-
-        borrowPeriodBox.getChildren().addAll(periodLabel, periodField, days);
-
-        librarySettings.getChildren().addAll(libraryTitle, fineSettingBox, borrowPeriodBox);
-
-        // System settings
-        VBox systemSettings = new VBox(16);
-        Label systemTitle = createSectionLabel("System Settings");
-
-        String[] systemOptions = {
-                "• Auto backup enabled",
-                "• Email notifications enabled",
-                "• System maintenance mode: Off",
-                "• Data retention: 5 years"
-        };
-
-        for (String option : systemOptions) {
-            Label lbl = new Label(option);
-            lbl.setFont(FontLoader.loadPoppins(16));
-            lbl.setTextFill(Theme.isDarkMode ? Color.web("#9ca3af") : Color.web("#4b5563"));
-            systemSettings.getChildren().add(lbl);
-        }
-
-        card.getChildren().addAll(toggleBox, librarySettings, systemSettings);
+        card.getChildren().add(toggleBox);
         container.getChildren().addAll(title, card);
         contentPane.getChildren().setAll(container);
     }
 
+
     // === HELPER METHODS ===
-
-    private Label createSectionLabel(String text) {
-        Label lbl = new Label(text);
-        lbl.setFont(Font.font(FontLoader.loadPoppins(20).getFamily(), FontWeight.SEMI_BOLD, 20));
-        lbl.setTextFill(Theme.isDarkMode ? Color.web("#e5e7eb") : Color.web("#111827"));
-        lbl.setPadding(new Insets(0, 0, 8, 0));
-        return lbl;
-    }
-
     private Button createActionButton(String text, Runnable onClick) {
         Button btn = new Button(text);
         btn.setFont(FontLoader.loadPoppins(14));
+        btn.setPadding(new Insets(8, 16, 8, 16));
+        btn.setStyle(Theme.isDarkMode ?
+                "-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-background-radius: 6; -fx-cursor: hand;" :
+                "-fx-background-color: #2563eb; -fx-text-fill: white; -fx-background-radius: 6; -fx-cursor: hand;");
+        btn.setOnAction(e -> onClick.run());
+        return btn;
+    }
+
+    private Button createActionButtonWithIcon(String text, FontAwesomeSolid iconType, Runnable onClick) {
+        // Create icon
+        FontIcon icon = new FontIcon(iconType);
+        icon.setIconSize(14);
+
+        // Set icon color based on theme
+        if (Theme.isDarkMode) {
+            icon.setIconColor(Color.WHITE);
+        } else {
+            icon.setIconColor(Color.WHITE);
+        }
+
+        // Create label
+        Label textLabel = new Label(text);
+        textLabel.setFont(FontLoader.loadPoppins(14));
+        textLabel.setTextFill(Color.WHITE);
+
+        HBox content = new HBox(8, icon, textLabel);
+        content.setAlignment(Pos.CENTER);
+
+        Button btn = new Button();
+        btn.setGraphic(content);
         btn.setPadding(new Insets(8, 16, 8, 16));
         btn.setStyle(Theme.isDarkMode ?
                 "-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-background-radius: 6; -fx-cursor: hand;" :
