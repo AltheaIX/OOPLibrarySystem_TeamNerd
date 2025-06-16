@@ -9,7 +9,6 @@ import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.chart.LineChart;
 import javafx.scene.chart.NumberAxis;
-import javafx.scene.chart.PieChart;
 import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
@@ -18,6 +17,9 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
+import javafx.collections.transformation.FilteredList;
+import javafx.collections.transformation.SortedList;
+
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -169,7 +171,6 @@ public class DashboardAdmin {
         return btn;
     }
 
-
     // === DASHBOARD CONTENT ===
     private void loadDashboardContent() {
         VBox container = createContentContainer();
@@ -180,16 +181,13 @@ public class DashboardAdmin {
         metrics.setPadding(new Insets(40, 0, 48, 0));
 
         long totalBooks = booksData.size();
-        long availableBooks = booksData.stream().filter(b -> "Available".equals(b.getStatus())).count();
         long borrowedBooks = booksData.stream().filter(b -> "Borrowed".equals(b.getStatus())).count();
         long overdueBooks = booksData.stream().filter(b -> "Overdue".equals(b.getStatus())).count();
         long totalUsers = usersData.size();
-        long activeUsers = usersData.stream().filter(u -> "Active".equals(u.getStatus())).count();
         long totalFines = calculateTotalFines();
 
         metrics.getChildren().addAll(
                 createMetricCard("Total Books", String.valueOf(totalBooks)),
-                createMetricCard("Available Books", String.valueOf(availableBooks)),
                 createMetricCard("Borrowed Books", String.valueOf(borrowedBooks)),
                 createMetricCard("Overdue Books", String.valueOf(overdueBooks))
         );
@@ -198,21 +196,11 @@ public class DashboardAdmin {
         metrics2.setPadding(new Insets(0, 0, 48, 0));
         metrics2.getChildren().addAll(
                 createMetricCard("Total Users", String.valueOf(totalUsers)),
-                createMetricCard("Active Users", String.valueOf(activeUsers)),
                 createMetricCard("Library Visitors", "1,234"),
                 createMetricCard("Total Fines", "Rp " + String.format("%,d", totalFines))
         );
 
-        // Charts section
-        HBox chartsBox = new HBox(24);
-        chartsBox.setPadding(new Insets(0, 0, 40, 0));
-
-        VBox chartContainer1 = createChartContainer("Books Borrowed This Month", createBooksChart());
-        VBox chartContainer2 = createChartContainer("Books by Genre", createGenreChart());
-
-        chartsBox.getChildren().addAll(chartContainer1, chartContainer2);
-
-        container.getChildren().addAll(title, metrics, metrics2, chartsBox);
+        container.getChildren().addAll(title, metrics, metrics2);
         contentPane.getChildren().setAll(container);
     }
 
@@ -248,24 +236,6 @@ public class DashboardAdmin {
         return lineChart;
     }
 
-    //    dummy pie chart
-    private PieChart createGenreChart() {
-        ObservableList<PieChart.Data> pieChartData = FXCollections.observableArrayList(
-                new PieChart.Data("Fiction", 45),
-                new PieChart.Data("Non-Fiction", 25),
-                new PieChart.Data("Romance", 15),
-                new PieChart.Data("Adventure", 10),
-                new PieChart.Data("Historical", 5)
-        );
-
-        PieChart pieChart = new PieChart(pieChartData);
-        pieChart.setPrefHeight(300);
-        pieChart.setLegendVisible(true);
-        pieChart.setAnimated(false);
-
-        return pieChart;
-    }
-
     private VBox createChartContainer(String title, javafx.scene.Node chart) {
         VBox container = new VBox(16);
         container.setPrefWidth(580);
@@ -287,23 +257,43 @@ public class DashboardAdmin {
         VBox container = createContentContainer();
         Label title = createTitleLabel("Books Management");
 
+        // Search field
+        TextField searchField = new TextField();
+        searchField.setPromptText("Search Books");
+        searchField.setMaxWidth(200);
+
         // Action buttons
         HBox actionButtons = new HBox(12);
         actionButtons.setPadding(new Insets(0, 0, 24, 0));
 
         Button addBookBtn = createActionButton("+ Add Book", this::showAddBookDialog);
-        Button refreshBtn = createActionButton("🔄 Refresh", this::loadBooksContent);
+        Button refreshBtn = createActionButtonWithIcon("Refresh", FontAwesomeSolid.SYNC_ALT, this::loadBooksContent);
 
-        actionButtons.getChildren().addAll(addBookBtn, refreshBtn);
+        actionButtons.getChildren().addAll(searchField, addBookBtn, refreshBtn);
 
         // Books table
         TableView<Book> booksTable = createBooksTable();
-        VBox tableContainer = createTableContainer(booksTable);
 
+        // === Filter & Sort Setup ===
+        FilteredList<Book> filteredData = new FilteredList<>(booksData, b -> true);
+        searchField.textProperty().addListener((obs, oldVal, newVal) -> {
+            filteredData.setPredicate(book -> {
+                if (newVal == null || newVal.isEmpty()) return true;
+                String lower = newVal.toLowerCase();
+                return book.getTitle().toLowerCase().contains(lower) ||
+                        book.getAuthor().toLowerCase().contains(lower) ||
+                        book.getGenre().toLowerCase().contains(lower);
+            });
+        });
+        SortedList<Book> sortedData = new SortedList<>(filteredData);
+        sortedData.comparatorProperty().bind(booksTable.comparatorProperty());
+        booksTable.setItems(sortedData);
+        // === END Filter & Sort Setup ===
+
+        VBox tableContainer = createTableContainer(booksTable);
         container.getChildren().addAll(title, actionButtons, tableContainer);
         contentPane.getChildren().setAll(container);
     }
-
     private TableView<Book> createBooksTable() {
         TableView<Book> table = new TableView<>();
         table.setItems(booksData);
@@ -398,9 +388,37 @@ public class DashboardAdmin {
     }
 
     // === USERS MANAGEMENT ===
+    private TableView<User> usersTable;
+    private ObservableList<User> filteredUsersData = FXCollections.observableArrayList();
+
     private void loadUsersContent() {
         VBox container = createContentContainer();
         Label title = createTitleLabel("Users Management");
+
+        // Action buttons with search
+        HBox actionButtons = new HBox(12);
+        actionButtons.setPadding(new Insets(0, 0, 24, 0));
+        actionButtons.setAlignment(Pos.CENTER_LEFT);
+
+        Button addUserBtn = createActionButton("+ Add User", this::showAddUserDialog);
+        Button refreshBtn = createActionButtonWithIcon("Refresh", FontAwesomeSolid.SYNC_ALT, this::loadUsersContent);
+
+        // Search field
+        TextField searchField = new TextField();
+        searchField.setPromptText("Search by User ID...");
+        searchField.setPrefWidth(200);
+        searchField.setStyle(Theme.isDarkMode ?
+                "-fx-background-color: #3c3c3c; -fx-text-fill: white; -fx-prompt-text-fill: #888; -fx-background-radius: 6;" :
+                "-fx-background-color: white; -fx-text-fill: black; -fx-background-radius: 6; -fx-border-color: #d1d5db; -fx-border-radius: 6;");
+
+        Button searchBtn = createActionButtonWithIcon("Search", FontAwesomeSolid.SEARCH, () -> filterUsersByUserId(searchField.getText()));
+        Button clearBtn = createActionButton("Clear", () -> {
+            searchField.clear();
+            filterUsersByUserId("");
+        });
+
+        actionButtons.getChildren().addAll(addUserBtn, refreshBtn,
+                new Label("  "), searchField, searchBtn, clearBtn);
 
         // User statistics
         HBox userStats = new HBox(24);
@@ -416,16 +434,17 @@ public class DashboardAdmin {
         );
 
         // Users table
-        TableView<User> usersTable = createUsersTable();
+        usersTable = createUsersTable();
         VBox tableContainer = createTableContainer(usersTable);
 
-        container.getChildren().addAll(title, userStats, tableContainer);
+        container.getChildren().addAll(title, actionButtons, userStats, tableContainer);
         contentPane.getChildren().setAll(container);
     }
 
     private TableView<User> createUsersTable() {
         TableView<User> table = new TableView<>();
-        table.setItems(usersData);
+        filteredUsersData.setAll(usersData);
+        table.setItems(filteredUsersData);
         table.setPrefHeight(400);
 
         TableColumn<User, String> idCol = new TableColumn<>("User ID");
@@ -444,11 +463,68 @@ public class DashboardAdmin {
         statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
         statusCol.setPrefWidth(100);
 
+        // Custom cell factory for status column to show colored status
+        statusCol.setCellFactory(column -> new TableCell<User, String>() {
+            @Override
+            protected void updateItem(String status, boolean empty) {
+                super.updateItem(status, empty);
+                if (empty || status == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(status);
+                    switch (status) {
+                        case "Active":
+                            setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
+                            break;
+                        case "Inactive":
+                            setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+                            break;
+                        default:
+                            setStyle("");
+                    }
+                }
+            }
+        });
+
         TableColumn<User, Integer> booksCol = new TableColumn<>("Books Borrowed");
         booksCol.setCellValueFactory(new PropertyValueFactory<>("booksBorrowed"));
         booksCol.setPrefWidth(120);
 
-        table.getColumns().addAll(idCol, nameCol, emailCol, statusCol, booksCol);
+        TableColumn<User, Void> actionCol = new TableColumn<>("Actions");
+        actionCol.setPrefWidth(120);
+        actionCol.setCellFactory(param -> new TableCell<>() {
+            private final Button editBtn = new Button("Edit");
+            private final Button deleteBtn = new Button("Delete");
+            private final HBox buttonsBox = new HBox(5, editBtn, deleteBtn);
+
+            {
+                editBtn.setStyle("-fx-background-color: #3b82f6; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4;");
+                deleteBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4;");
+
+                editBtn.setOnAction(e -> {
+                    User user = getTableView().getItems().get(getIndex());
+                    showEditUserDialog(user);
+                });
+
+                deleteBtn.setOnAction(e -> {
+                    User user = getTableView().getItems().get(getIndex());
+                    showDeleteUserConfirmation(user);
+                });
+            }
+
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty) {
+                    setGraphic(null);
+                } else {
+                    setGraphic(buttonsBox);
+                }
+            }
+        });
+
+        table.getColumns().addAll(idCol, nameCol, emailCol, statusCol, booksCol, actionCol);
         return table;
     }
 
@@ -1141,6 +1217,149 @@ public class DashboardAdmin {
         container.setAlignment(Pos.TOP_LEFT);
         container.setPadding(new Insets(0));
         return container;
+    }
+
+    private void filterUsersByUserId(String userId) {
+        if (userId == null || userId.trim().isEmpty()) {
+            filteredUsersData.setAll(usersData);
+        } else {
+            filteredUsersData.setAll(
+                    usersData.stream()
+                            .filter(u -> u.getId().toLowerCase().contains(userId.toLowerCase()))
+                            .collect(java.util.stream.Collectors.toList())
+            );
+        }
+    }
+
+    private void showAddUserDialog() {
+        Dialog<User> dialog = new Dialog<>();
+        dialog.setTitle("Add New User");
+        dialog.setHeaderText("Enter user details");
+
+        ButtonType addButtonType = new ButtonType("Add", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(addButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField nameField = new TextField();
+        TextField emailField = new TextField();
+        ComboBox<String> statusField = new ComboBox<>();
+        statusField.getItems().addAll("Active", "Inactive");
+        statusField.setValue("Active");
+        TextField booksBorrowedField = new TextField("0");
+
+        grid.add(new Label("Name:"), 0, 0);
+        grid.add(nameField, 1, 0);
+        grid.add(new Label("Email:"), 0, 1);
+        grid.add(emailField, 1, 1);
+        grid.add(new Label("Status:"), 0, 2);
+        grid.add(statusField, 1, 2);
+        grid.add(new Label("Books Borrowed:"), 0, 3);
+        grid.add(booksBorrowedField, 1, 3);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == addButtonType) {
+                String newId = "U" + String.format("%03d", usersData.size() + 1);
+                try {
+                    int booksBorrowed = Integer.parseInt(booksBorrowedField.getText());
+                    return new User(newId, nameField.getText(), emailField.getText(),
+                            statusField.getValue(), booksBorrowed);
+                } catch (NumberFormatException e) {
+                    showAlert("Error", "Books Borrowed must be a valid number!");
+                    return null;
+                }
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(user -> {
+            if (user != null) {
+                usersData.add(user);
+                filteredUsersData.setAll(usersData);
+                showAlert("Success", "User added successfully!");
+            }
+        });
+    }
+
+    private void showEditUserDialog(User user) {
+        Dialog<User> dialog = new Dialog<>();
+        dialog.setTitle("Edit User");
+        dialog.setHeaderText("Edit user details");
+
+        ButtonType saveButtonType = new ButtonType("Save", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveButtonType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20, 150, 10, 10));
+
+        TextField nameField = new TextField(user.getName());
+        TextField emailField = new TextField(user.getEmail());
+        ComboBox<String> statusField = new ComboBox<>();
+        statusField.getItems().addAll("Active", "Inactive");
+        statusField.setValue(user.getStatus());
+        TextField booksBorrowedField = new TextField(String.valueOf(user.getBooksBorrowed()));
+
+        grid.add(new Label("Name:"), 0, 0);
+        grid.add(nameField, 1, 0);
+        grid.add(new Label("Email:"), 0, 1);
+        grid.add(emailField, 1, 1);
+        grid.add(new Label("Status:"), 0, 2);
+        grid.add(statusField, 1, 2);
+        grid.add(new Label("Books Borrowed:"), 0, 3);
+        grid.add(booksBorrowedField, 1, 3);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(dialogButton -> {
+            if (dialogButton == saveButtonType) {
+                try {
+                    int booksBorrowed = Integer.parseInt(booksBorrowedField.getText());
+                    user.setName(nameField.getText());
+                    user.setEmail(emailField.getText());
+                    user.setStatus(statusField.getValue());
+                    user.setBooksBorrowed(booksBorrowed);
+                    return user;
+                } catch (NumberFormatException e) {
+                    showAlert("Error", "Books Borrowed must be a valid number!");
+                    return null;
+                }
+            }
+            return null;
+        });
+
+        dialog.showAndWait().ifPresent(result -> {
+            if (result != null) {
+                filteredUsersData.setAll(usersData);
+                usersTable.refresh();
+                showAlert("Success", "User updated successfully!");
+                loadUsersContent(); // Refresh to update statistics
+            }
+        });
+    }
+
+    private void showDeleteUserConfirmation(User user) {
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
+        alert.setTitle("Delete User");
+        alert.setHeaderText("Are you sure you want to delete this user?");
+        alert.setContentText("User ID: " + user.getId() +
+                "\nName: " + user.getName() +
+                "\nEmail: " + user.getEmail());
+
+        alert.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.OK) {
+                usersData.remove(user);
+                filteredUsersData.setAll(usersData);
+                showAlert("Success", "User deleted successfully!");
+                loadUsersContent(); // Refresh to update statistics
+            }
+        });
     }
 
     // === DATA CLASSES ===
