@@ -3,12 +3,10 @@
   <component name="NewModuleRootManager" inherit-compiler-output="true">
     <exclude-output />
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/Library/resources" type="java-resource" />
-      <sourceFolder url="file://$MODULE_DIR$/Library/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/src/UMM Library Project" isTestSource="false" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="library" name="javafx.base" level="project" />
-    <orderEntry type="library" name="ikonli-core-12.3.1" level="project" />
   </component>
 </module>
