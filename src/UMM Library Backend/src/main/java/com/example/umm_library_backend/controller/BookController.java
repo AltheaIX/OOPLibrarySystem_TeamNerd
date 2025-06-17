@@ -28,9 +28,24 @@ public class BookController {
         return ResponseEntity.status(HttpStatus.OK).body(new RetrieveBookResponse<>(200, bookService.getAllBooks()));
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/id/{id}")
     public ResponseEntity<RetrieveBookResponse> getBookById(@PathVariable("id") long id) {
         return ResponseEntity.status(HttpStatus.OK).body(new RetrieveBookResponse<>(200, bookService.getBookById(id)));
+    }
+
+    @GetMapping("/isbn/{isbn}")
+    public ResponseEntity<RetrieveBookResponse> getBookByIsbn(@PathVariable("isbn") String isbn) {
+        return ResponseEntity.status(HttpStatus.OK).body(new RetrieveBookResponse<>(200, bookService.getBookByIsbn(isbn)));
+    }
+
+    @GetMapping("/name/{name}")
+    public ResponseEntity<RetrieveBookResponse> getBookByName(@PathVariable("name") String name) {
+        return ResponseEntity.status(HttpStatus.OK).body(new RetrieveBookResponse<>(200, bookService.getBookByName(name)));
+    }
+
+    @GetMapping("/author/{author}")
+    public ResponseEntity<RetrieveBookResponse> getBookByAuthor(@PathVariable("author") String author) {
+        return ResponseEntity.status(HttpStatus.OK).body(new RetrieveBookResponse<>(200, bookService.getBookByAuthor(author)));
     }
 
     @PutMapping("/{id}")
