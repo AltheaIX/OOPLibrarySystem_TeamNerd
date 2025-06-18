@@ -657,7 +657,13 @@ public class DashboardUser {
                     private void setBorrowReturnButtonText() {
                         Book book = getItem();
                         if (book != null) {
-                            borrowReturnButton.setText(book.isBorrowed() ? "Return" : "Borrow");
+                            if (book.isBorrowed()) {
+                                borrowReturnButton.setText("Book is being borrowed");
+                                borrowReturnButton.setDisable(true);
+                            } else {
+                                borrowReturnButton.setText("Borrow");
+                                borrowReturnButton.setDisable(false);
+                            }
                         }
                     }
 
@@ -706,44 +712,34 @@ public class DashboardUser {
 
     private void showBorrowReturnDialog(Book book) {
         if (book.isBorrowed()) {
-            Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
-            alert.setTitle("Return Book");
-            alert.setHeaderText("Return book: " + book.getTitle());
-            alert.setContentText("Are you sure you want to return this book?");
-            Optional<ButtonType> result = alert.showAndWait();
-
-            if (result.isPresent() && result.get() == ButtonType.OK) {
-                book.setBorrowed(false);
-                book.setBorrowDate(null);
-                book.setReturnDate(null);
-                borrowedBooks.remove(book);
-                refreshUI();
-            }
-        } else {
-            TextInputDialog dialog = new TextInputDialog("14");
-            dialog.setTitle("Borrow Book");
-            dialog.setHeaderText("Borrow book: " + book.getTitle());
-            dialog.setContentText("Enter number of days to borrow (1-60):");
-            Optional<String> input = dialog.showAndWait();
-
-            input.ifPresent(daysStr -> {
-                try {
-                    int days = Integer.parseInt(daysStr);
-                    if (days < 1 || days > 60) {
-                        showAlert("Please enter a valid number between 1 and 60.");
-                        return;
-                    }
-                    book.setBorrowed(true);
-                    book.setBorrowDate(LocalDate.now());
-                    book.setReturnDate(LocalDate.now().plusDays(days));
-                    borrowedBooks.add(book);
-                    addLoanHistoryRecord(book, LocalDate.now(), LocalDate.now().plusDays(days));
-                    refreshUI();
-                } catch (NumberFormatException e) {
-                    showAlert("Invalid input. Please enter a numeric value.");
-                }
-            });
+            showAlert("Buku ini sedang dipinjam dan tidak tersedia saat ini.");
+            return;
         }
+
+        TextInputDialog dialog = new TextInputDialog("14");
+        dialog.setTitle("Pinjam Buku");
+        dialog.setHeaderText("Pinjam buku: " + book.getTitle());
+        dialog.setContentText("Masukkan jumlah hari peminjaman (1-60):");
+
+        Optional<String> input = dialog.showAndWait();
+
+        input.ifPresent(daysStr -> {
+            try {
+                int days = Integer.parseInt(daysStr);
+                if (days < 1 || days > 60) {
+                    showAlert("Masukkan angka antara 1 hingga 60.");
+                    return;
+                }
+                book.setBorrowed(true);
+                book.setBorrowDate(LocalDate.now());
+                book.setReturnDate(LocalDate.now().plusDays(days));
+                borrowedBooks.add(book);
+                addLoanHistoryRecord(book, LocalDate.now(), LocalDate.now().plusDays(days));
+                refreshUI();
+            } catch (NumberFormatException e) {
+                showAlert("Input tidak valid. Masukkan angka.");
+            }
+        });
     }
 
     private void addLoanHistoryRecord(Book book, LocalDate borrowDate, LocalDate returnDate) {
