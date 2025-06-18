@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Main config" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="App.Main" />
+    <module name="Library" />
+    <option name="VM_PARAMETERS" value="--module-path $PROJECT_DIR$/../../../../../../javafx-sdk-17.0.15/lib --add-modules javafx.controls,javafx.fxml" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
