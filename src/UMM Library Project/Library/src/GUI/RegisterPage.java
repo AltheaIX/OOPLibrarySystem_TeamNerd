@@ -1,6 +1,7 @@
 package GUI;
 
 import Utils.Theme;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.animation.FadeTransition;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -8,11 +9,18 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import Utils.FontLoader;
 import javafx.util.Duration;
+import dto.CreateUserRequest;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+import static App.Main.BASE_URL;
 
 public class RegisterPage {
     private VBox root;
@@ -27,15 +35,51 @@ public class RegisterPage {
         return root;
     }
 
+    private boolean register(CreateUserRequest newUser) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(newUser);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/auth/register"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println(requestBody);
+            System.out.println(response.statusCode());
+
+            if(response.statusCode() == 200) {
+                showAlert("User created successfully!");
+                return true;
+            }
+
+            if(response.statusCode() == 400) {
+                showAlert("Email already exists!");
+                return false;
+            }
+
+            showAlert("User created failed!");
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     private void createUI() {
         // Title
         Text title = new Text("Create new Account");
         title.setFont(FontLoader.loadPoppins(24));
         title.setFill(Theme.isDarkMode ? Color.WHITE : Color.BLACK);
 
-
+        // Back to Login
         Hyperlink loginLink = new Hyperlink("Already Registered? Login");
         loginLink.setFont(FontLoader.loadPoppins(12));
+        loginLink.setStyle("-fx-text-fill: " + (Theme.isDarkMode ? "white;" : "black;"));
 
         // Name
         Label nameLabel = new Label("NAME");
@@ -62,12 +106,13 @@ public class RegisterPage {
         passwordField.setPromptText("*******");
         passwordField.setStyle(Theme.isDarkMode ? "-fx-background-color: #2a2a2a; -fx-text-fill: #ffffff;" : "");
 
-        // Date of Birth
-        Label dobLabel = new Label("DATE OF BIRTH");
-        dobLabel.setFont(FontLoader.loadPoppins(12));
-        dobLabel.setTextFill(Theme.isDarkMode ? Color.LIGHTGRAY : Color.BLACK);
-        DatePicker datePicker = new DatePicker();
-        datePicker.setStyle(Theme.isDarkMode ? "-fx-control-inner-background: #2a2a2a; -fx-text-fill: #ffffff;" : "");
+        // Major
+        Label majorLabel = new Label("MAJOR");
+        majorLabel.setFont(FontLoader.loadPoppins(12));
+        majorLabel.setTextFill(Theme.isDarkMode ? Color.LIGHTGRAY : Color.BLACK);
+        TextField majorField = new TextField();
+        majorField.setPromptText("Your major");
+        majorField.setStyle(Theme.isDarkMode ? "-fx-background-color: #2a2a2a; -fx-text-fill: white;" : "");
 
 
         // Sign Up Button
@@ -91,7 +136,7 @@ public class RegisterPage {
                 nameLabel, nameField,
                 emailLabel, emailField,
                 passwordLabel, passwordField,
-                dobLabel, datePicker,
+                majorLabel, majorField,
                 signupButton
         );
         formBox.setAlignment(Pos.CENTER);
@@ -122,19 +167,19 @@ public class RegisterPage {
             fadeOut.play();
         });
 
-        // Event: submit (nanti bisa dipakai simpan user)
+        // Event: submit
         signupButton.setOnAction(e -> {
             String name = nameField.getText();
             String email = emailField.getText();
             String password = passwordField.getText();
-            String dob = datePicker.getValue() != null ? datePicker.getValue().toString() : "";
+            String major = majorField.getText();
 
             // Validasi simple
-            if (name.isEmpty() || email.isEmpty() || password.isEmpty() || dob.isEmpty()) {
+            if (name.isEmpty() || email.isEmpty() || password.isEmpty() || major.isEmpty()) {
                 showAlert("All fields are required!");
             } else {
-                showAlert("Account created successfully!");
-                // TODO: simpan user ke service
+                CreateUserRequest request = new CreateUserRequest(name, email, password, major);
+                register(request);
             }
         });
     }
