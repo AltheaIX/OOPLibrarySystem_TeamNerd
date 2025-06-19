@@ -12,7 +12,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
-public class TransactionServiceImpl {
+public class TransactionServiceImpl implements TransactionService {
     private final TransactionRepositoryImpl transactionRepositoryImpl;
 
     public TransactionServiceImpl(TransactionRepositoryImpl transactionRepositoryImpl) {

@@ -18,7 +18,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @Service
-public class BorrowServiceImpl {
+public class BorrowServiceImpl implements BorrowService {
     private final TransactionRepositoryImpl transactionRepository;
     private final BookRepositoryImpl bookRepository;
 

@@ -15,7 +15,7 @@ import java.util.Optional;
 
 @Repository
 @Transactional
-public class UserRepositoryImpl {
+public class UserRepositoryImpl implements UserRepository {
     @PersistenceContext
     private EntityManager em;
 

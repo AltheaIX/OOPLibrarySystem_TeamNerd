@@ -43,7 +43,7 @@ public class UserController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<DeleteUserResponse> deleteUser(@PathVariable Long id){
-        userServiceImpl.deleteBook(id);
+        userServiceImpl.deleteUser(id);
         return ResponseEntity.status(HttpStatus.OK).body(new DeleteUserResponse<>(200, true));
     }
 }

@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-public class UserServiceImpl {
+public class UserServiceImpl implements UserService {
     @Autowired
     private PasswordEncoder passwordEncoder;
     private final UserRepositoryImpl userRepository;
@@ -55,7 +55,7 @@ public class UserServiceImpl {
         return userRepository.update(user);
     }
 
-    public void deleteBook(Long id) {
+    public void deleteUser(Long id) {
         userRepository.deleteById(id);
     }
 }
