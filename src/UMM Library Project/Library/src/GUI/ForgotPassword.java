@@ -8,11 +8,19 @@ import javafx.scene.Scene;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import Utils.FontLoader;
 import javafx.util.Duration;
+
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+
+import static App.Main.BASE_URL;
 
 public class ForgotPassword {
     private VBox root;
@@ -25,6 +33,29 @@ public class ForgotPassword {
 
     public VBox getView() {
         return root;
+    }
+
+    private boolean forgotPassword(String email){
+        try {
+            String encodedEmail = URLEncoder.encode(email, StandardCharsets.UTF_8);
+            String url = BASE_URL + "/auth/forgot?email=" + encodedEmail;
+
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            System.out.println("Status: " + response.statusCode());
+            System.out.println("Response: " + response.body());
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     private void createUI() {
@@ -104,7 +135,7 @@ public class ForgotPassword {
             if (email.isEmpty()) {
                 showAlert("Please enter your email.");
             } else {
-                // TODO: Kirim reset link jika pakai database/SMTP
+                forgotPassword(email);
                 showAlert("A reset link has been sent to: " + email);
             }
         });

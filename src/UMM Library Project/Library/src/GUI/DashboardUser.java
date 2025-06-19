@@ -1,8 +1,10 @@
 package GUI;
 
-import GUI.LoginPage;
 import Utils.FontLoader;
+import Utils.SessionManager;
 import Utils.Theme;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dto.*;
 import javafx.application.Platform;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
@@ -22,13 +24,28 @@ import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Stage;
 import javafx.util.Callback;
+import model.Book;
+import model.BookData;
+import model.BorrowedBook;
+import model.User;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static App.Main.BASE_URL;
 
 public class DashboardUser {
 
@@ -37,15 +54,12 @@ public class DashboardUser {
     private StackPane contentPane;
     private static final double MAX_CONTENT_WIDTH = 1200;
 
-    private ObservableList<Book> allBooks = FXCollections.observableArrayList();
-    private ObservableList<Book> filteredBooks = FXCollections.observableArrayList();
-    private ObservableList<Book> favoriteBooks = FXCollections.observableArrayList();
-    private ObservableList<Book> borrowedBooks = FXCollections.observableArrayList();
-    private ObservableList<LoanRecord> loanHistory = FXCollections.observableArrayList();
+    private ObservableList<BookData> allBooks = FXCollections.observableArrayList();
+    private ObservableList<BookData> filteredBooks = FXCollections.observableArrayList();
+    private ObservableList<BorrowedBook> borrowedBooks = FXCollections.observableArrayList();
+    private final ObservableList<LoanRecord> loanHistory = FXCollections.observableArrayList();
 
     public void show(Stage stage) {
-        initializeDummyData();
-
         root = new BorderPane();
 
         sidebar = createSidebar(stage);
@@ -65,28 +79,32 @@ public class DashboardUser {
         loadDashboardPage();
     }
 
-    private void initializeDummyData() {
+    public void fetchBooks() {
         allBooks.clear();
-        favoriteBooks.clear();
-        borrowedBooks.clear();
-        loanHistory.clear();
+        filteredBooks.clear();
 
-        allBooks.addAll(
-                new Book("The Great Gatsby", "A classic novel", "Fiction", false,
-                        "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/63579867-2f69-45de-bcad-eab6285c4a88.png"),
-                new Book("1984", "Dystopian novel", "Fiction", false,
-                        "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/4ee75061-388e-4d24-b36f-7c9c36f33367.png"),
-                new Book("Clean Code", "Programming best practices", "Education", false,
-                        "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/430c986c-a07e-465f-95e7-4e30b45d34dd.png"),
-                new Book("Effective Java", "Java programming advanced", "Education", false,
-                        "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/3550b48c-a550-4a83-b187-f18465d3739a.png"),
-                new Book("Pride and Prejudice", "Romance classic", "Romance", false,
-                        "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/731585c1-9ddc-4d52-93fa-d29e0319e634.png"),
-                new Book("The Hobbit", "Fantasy adventure", "Fantasy", false,
-                        "https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/d7d41894-67ca-47d0-a5bf-a7146ba1e24c.png")
-        );
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/book"))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
 
-        filteredBooks.setAll(allBooks);
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            BookResponse bookResponse = mapper.readValue(response.body(), BookResponse.class);
+            for(BookData book : bookResponse.data){
+                allBooks.add(book);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        filteredBooks.addAll(allBooks);
     }
 
     private void applyThemeStyles() {
@@ -117,7 +135,6 @@ public class DashboardUser {
         box.getChildren().addAll(
                 createNavButton("Dashboard", FontAwesomeSolid.HOME, this::loadDashboardPage),
                 createNavButton("Books", FontAwesomeSolid.BOOK, this::loadBooksPage),
-                createNavButton("Favourites", FontAwesomeSolid.HEART, this::loadFavouritesPage),
                 createNavButton("Loan History", FontAwesomeSolid.CLOCK, this::loadLoanHistoryPage),
                 createNavButton("Profile", FontAwesomeSolid.USER, this::loadUserPage),
                 createNavButton("Settings", FontAwesomeSolid.COG, this::loadSettingsPage),
@@ -199,9 +216,13 @@ public class DashboardUser {
     }
 
     private void loadDashboardPage() {
+        fetchBooks();
+        fetchBorrowedBooks();
+
         VBox container = createContentContainer();
 
-        Label mainTitle = new Label("Welcome back, User");
+        User user = SessionManager.getInstance().getUser();
+        Label mainTitle = new Label("Welcome back, " + user.getFullName());
         mainTitle.setFont(Font.font(FontLoader.loadPoppins(42).getFamily(), FontWeight.SEMI_BOLD, 42));
         mainTitle.setTextFill(colorForText());
         container.getChildren().add(mainTitle);
@@ -220,9 +241,7 @@ public class DashboardUser {
         statsRow.setPadding(new Insets(32, 0, 48, 0));
         statsRow.getChildren().addAll(
                 createStatCard("Total Books", String.valueOf(allBooks.size())),
-                createStatCard("Borrowed Books", String.valueOf(borrowedBooks.size())),
-                createStatCard("Favourites", String.valueOf(favoriteBooks.size())),
-                createStatCard("Check-ins Today", "5")
+                createStatCard("Borrowed Books", String.valueOf(borrowedBooks.size()))
         );
         container.getChildren().add(statsRow);
 
@@ -246,22 +265,7 @@ public class DashboardUser {
         applyButtonStyles(searchBtn);
         searchBtn.setOnAction(e -> filterBooks(searchField.getText()));
 
-        TextField genreField = new TextField();
-        genreField.getStyleClass().add("search-field");
-        genreField.setPromptText("Search books by genre...");
-        genreField.setFont(FontLoader.loadPoppins(14));
-        genreField.setPrefWidth(320);
-        genreField.setStyle(getTextFieldStyle());
-        genreField.setOnKeyReleased(e -> {
-            if (e.getCode() == KeyCode.ENTER) {
-                filterBooksByGenre(genreField.getText());
-            }
-        });
-        Button genreSearchBtn = new Button("Search");
-        applyButtonStyles(genreSearchBtn);
-        genreSearchBtn.setOnAction(e -> filterBooksByGenre(genreField.getText()));
-
-        searchBars.getChildren().addAll(searchField, searchBtn, genreField, genreSearchBtn);
+        searchBars.getChildren().addAll(searchField, searchBtn);
         container.getChildren().add(searchBars);
 
         VBox listContainer = createBooksCatalogContent(filteredBooks);
@@ -270,7 +274,35 @@ public class DashboardUser {
         contentPane.getChildren().setAll(container);
     }
 
+    public void fetchBorrowedBooks() {
+        borrowedBooks.clear();
+        User user = SessionManager.getInstance().getUser();
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/borrow/" + user.getId()))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.findAndRegisterModules();
+            System.out.println(response.body());
+            BorrowedBookResponse bookResponse = mapper.readValue(response.body(), BorrowedBookResponse .class);
+            for(BorrowedBook book : bookResponse.data){
+                borrowedBooks.add(book);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void loadBooksPage() {
+        fetchBooks();
+        fetchBorrowedBooks();
         VBox container = createContentContainer();
 
         Label title = new Label("Your Books");
@@ -278,7 +310,6 @@ public class DashboardUser {
         title.setTextFill(colorForText());
 
         container.getChildren().add(title);
-
         VBox catalogContent = createBooksCatalogContent(filteredBooks);
         container.getChildren().add(catalogContent);
 
@@ -300,11 +331,11 @@ public class DashboardUser {
             noBorrowed.setTextFill(colorForSubText());
             borrowedBooksContainer.getChildren().add(noBorrowed);
         } else {
-            for (Book book : borrowedBooks) {
+            for (BorrowedBook book : borrowedBooks) {
                 HBox bookBox = new HBox(16);
                 bookBox.setAlignment(Pos.CENTER_LEFT);
 
-                ImageView cover = new ImageView(new Image(book.getCoverUrl(), 50, 80, true, true, true));
+                ImageView cover = new ImageView(new Image("http://image.com", 50, 80, true, true, true));
                 cover.setSmooth(true);
 
                 VBox infoBox = new VBox(4);
@@ -324,50 +355,40 @@ public class DashboardUser {
         container.getChildren().add(borrowedBooksContainer);
     }
 
-    private void loadFavouritesPage() {
-        VBox container = createContentContainer();
+    private boolean changePassword(ChangePasswordRequest changePasswordRequest){
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
 
-        Label title = new Label("Favourites");
-        title.setFont(Font.font(FontLoader.loadPoppins(36).getFamily(), FontWeight.SEMI_BOLD, 36));
-        title.setTextFill(colorForText());
+            String requestBody = mapper.writeValueAsString(changePasswordRequest);
+            System.out.println("requestBody: " + requestBody);
 
-        container.getChildren().add(title);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/auth/changepass"))
+                    .header("Content-Type", "application/json")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
 
-        favoriteBooks.setAll(allBooks.stream().filter(Book::isFavourite).collect(Collectors.toList()));
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        HBox searchBars = new HBox(12);
-        searchBars.setAlignment(Pos.CENTER_LEFT);
-        searchBars.setPadding(new Insets(0, 0, 24, 0));
+            System.out.println("response: " + response.body());
 
-        TextField searchField = new TextField();
-        searchField.setPromptText("Search favourite books by title...");
-        searchField.setFont(FontLoader.loadPoppins(14));
-        searchField.setPrefWidth(320);
-        searchField.setStyle(getTextFieldStyle());
-        searchField.setOnKeyReleased(e -> {
-            if (e.getCode() == KeyCode.ENTER) {
-                filterFavoriteBooksByTitle(searchField.getText());
+            if(response.statusCode() == 200) {
+                showAlert("Password changed successfully!");
+                return true;
             }
-        });
 
-        TextField genreField = new TextField();
-        genreField.setPromptText("Search favourite books by genre...");
-        genreField.setFont(FontLoader.loadPoppins(14));
-        genreField.setPrefWidth(320);
-        genreField.setStyle(getTextFieldStyle());
-        genreField.setOnKeyReleased(e -> {
-            if (e.getCode() == KeyCode.ENTER) {
-                filterFavoriteBooksByGenre(genreField.getText());
+            if(response.statusCode() == 401) {
+                showAlert("Current password is incorrect!");
+                return false;
             }
-        });
 
-        searchBars.getChildren().addAll(searchField, genreField);
-        container.getChildren().add(searchBars);
-
-        VBox listContainer = createBooksCatalogContent(favoriteBooks);
-        container.getChildren().add(listContainer);
-
-        contentPane.getChildren().setAll(container);
+            showAlert("Password change failed!");
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     private void loadUserPage() {
@@ -381,10 +402,13 @@ public class DashboardUser {
 
         VBox card = createContentCard();
         card.setSpacing(24);
+        User user = SessionManager.getInstance().getUser();
+        OffsetDateTime dateTime = OffsetDateTime.parse(user.getCreatedAt());
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH);
 
-        Label nameLabel = new Label("Name: John Doe");
-        Label emailLabel = new Label("Email: johndoe@example.com");
-        Label memberSinceLabel = new Label("Member Since: January 2022");
+        Label nameLabel = new Label("Name: " + user.getFullName());
+        Label emailLabel = new Label("Email: " + user.getEmail());
+        Label memberSinceLabel = new Label("Member Since: " + dateTime.format(formatter));
 
         for (Label lbl : new Label[]{nameLabel, emailLabel, memberSinceLabel}) {
             lbl.setFont(FontLoader.loadPoppins(18));
@@ -401,27 +425,30 @@ public class DashboardUser {
 
         PasswordField currentPwField = new PasswordField();
         currentPwField.setPromptText("Current Password");
-        currentPwField.setFont(FontLoader.loadPoppins(14));
+        currentPwField.setPromptText("********");
         currentPwField.setStyle(getTextFieldStyle());
 
         PasswordField newPwField = new PasswordField();
         newPwField.setPromptText("New Password");
-        newPwField.setFont(FontLoader.loadPoppins(14));
+        newPwField.setPromptText("********");
         newPwField.setStyle(getTextFieldStyle());
 
         PasswordField confirmPwField = new PasswordField();
         confirmPwField.setPromptText("Confirm New Password");
-        confirmPwField.setFont(FontLoader.loadPoppins(14));
+        confirmPwField.setPromptText("********");
         confirmPwField.setStyle(getTextFieldStyle());
 
         Button changePwBtn = new Button("Change Password");
         applyButtonStyles(changePwBtn);
         changePwBtn.setOnAction(e -> {
             if (!validatePasswordFields(currentPwField, newPwField, confirmPwField)) return;
-            showAlert("Password changed successfully.");
-            currentPwField.clear();
-            newPwField.clear();
-            confirmPwField.clear();
+
+            ChangePasswordRequest changePasswordRequest = new ChangePasswordRequest(user.getEmail(), currentPwField.getText(), newPwField.getText());
+            if(changePassword(changePasswordRequest)) {
+                currentPwField.clear();
+                newPwField.clear();
+                confirmPwField.clear();
+            }
         });
 
         pwChangeBox.getChildren().addAll(pwLabel, currentPwField, newPwField, confirmPwField, changePwBtn);
@@ -522,50 +549,6 @@ public class DashboardUser {
         }
     }
 
-    private void filterBooksByGenre(String text) {
-        if (text == null || text.trim().isEmpty()) {
-            filteredBooks.setAll(allBooks);
-        } else {
-            String lower = text.toLowerCase();
-            filteredBooks.setAll(allBooks.stream()
-                    .filter(book -> book.getGenre().toLowerCase().contains(lower))
-                    .collect(Collectors.toList()));
-        }
-    }
-
-    private void filterFavoriteBooksByTitle(String text) {
-        if (text == null || text.trim().isEmpty()) {
-            favoriteBooks.setAll(allBooks.stream().filter(Book::isFavourite).collect(Collectors.toList()));
-        } else {
-            String lower = text.toLowerCase();
-            favoriteBooks.setAll(allBooks.stream()
-                    .filter(b -> b.isFavourite() && b.getTitle().toLowerCase().contains(lower))
-                    .collect(Collectors.toList()));
-        }
-    }
-
-    private void filterFavoriteBooksByGenre(String text) {
-        if (text == null || text.trim().isEmpty()) {
-            favoriteBooks.setAll(allBooks.stream().filter(Book::isFavourite).collect(Collectors.toList()));
-        } else {
-            String lower = text.toLowerCase();
-            favoriteBooks.setAll(allBooks.stream()
-                    .filter(b -> b.isFavourite() && b.getGenre().toLowerCase().contains(lower))
-                    .collect(Collectors.toList()));
-        }
-    }
-
-    private void toggleFavorite(Book book) {
-        if (book == null) return;
-        if (book.isFavourite()) {
-            book.setFavourite(false);
-            favoriteBooks.remove(book);
-        } else {
-            book.setFavourite(true);
-            favoriteBooks.add(book);
-        }
-    }
-
     private void refreshUI() {
         loadDashboardPage();
     }
@@ -597,7 +580,7 @@ public class DashboardUser {
         alert.showAndWait();
     }
 
-    private VBox createBooksCatalogContent(ObservableList<Book> books) {
+    private VBox createBooksCatalogContent(ObservableList<BookData> books) {
         VBox listContainer = new VBox(12);
         listContainer.setPrefWidth(MAX_CONTENT_WIDTH);
         listContainer.setPadding(new Insets(24));
@@ -608,17 +591,16 @@ public class DashboardUser {
         listTitle.setTextFill(colorForText());
         listContainer.getChildren().add(listTitle);
 
-        ListView<Book> listView = new ListView<>(books);
+        ListView<BookData> listView = new ListView<>(books);
         listView.setCellFactory(new Callback<>() {
             @Override
-            public ListCell<Book> call(ListView<Book> param) {
+            public ListCell<BookData> call(ListView<BookData> param) {
                 return new ListCell<>() {
                     private final ImageView imageView = new ImageView();
                     private final Label titleLabel = new Label();
-                    private final Label genreLabel = new Label();
-                    private final Button favButton = new Button();
+                    private final Label quantityLabel = new Label();
                     private final Button borrowReturnButton = new Button();
-                    private final VBox vbox = new VBox(titleLabel, genreLabel, new HBox(8, favButton, borrowReturnButton));
+                    private final VBox vbox = new VBox(titleLabel, quantityLabel, new HBox(8, borrowReturnButton));
                     private final HBox hbox = new HBox(imageView, vbox);
 
                     {
@@ -629,36 +611,20 @@ public class DashboardUser {
                         hbox.setSpacing(12);
                         vbox.setSpacing(4);
 
-                        favButton.setFont(Font.font(18));
-                        favButton.setStyle("-fx-background-color: transparent; -fx-cursor: hand;");
-                        favButton.setOnAction(e -> {
-                            Book book = getItem();
-                            if (book != null) toggleFavorite(book);
-                            updateFavoriteButton();
-                        });
-
                         applyButtonStyles(borrowReturnButton);
                         borrowReturnButton.setOnAction(e -> {
-                            Book book = getItem();
+                            BookData book = getItem();
                             if (book != null) showBorrowReturnDialog(book);
                         });
 
                         setFocusTraversable(true);
                     }
 
-                    private void updateFavoriteButton() {
-                        Book book = getItem();
-                        if (book != null) {
-                            favButton.setText(book.isFavourite() ? "♥" : "♡");
-                            favButton.setTextFill(book.isFavourite() ? Color.RED : (Theme.isDarkMode ? Color.LIGHTGRAY : Color.DARKGRAY));
-                        }
-                    }
-
                     private void setBorrowReturnButtonText() {
-                        Book book = getItem();
+                        BookData book = getItem();
                         if (book != null) {
-                            if (book.isBorrowed()) {
-                                borrowReturnButton.setText("Book is being borrowed");
+                            if (book.getQuantity() <= 0) {
+                                borrowReturnButton.setText("Book is not available.");
                                 borrowReturnButton.setDisable(true);
                             } else {
                                 borrowReturnButton.setText("Borrow");
@@ -668,21 +634,17 @@ public class DashboardUser {
                     }
 
                     @Override
-                    protected void updateItem(Book book, boolean empty) {
+                    protected void updateItem(BookData book, boolean empty) {
                         super.updateItem(book, empty);
                         if (empty || book == null) {
                             setGraphic(null);
                         } else {
-                            imageView.setImage(new Image(book.getCoverUrl(), 50, 80, true, true, true));
+                            imageView.setImage(new Image("https://image.com/", 50, 80, true, true, true));
                             titleLabel.setText(book.getTitle());
                             titleLabel.setFont(FontLoader.loadPoppins(16));
                             titleLabel.setTextFill(colorForText());
+                            quantityLabel.setText("Quantity: " + Long.toString(book.getQuantity()));
 
-                            genreLabel.setText(book.getGenre());
-                            genreLabel.setFont(FontLoader.loadPoppins(12));
-                            genreLabel.setTextFill(colorForSubText());
-
-                            updateFavoriteButton();
                             setBorrowReturnButtonText();
                             setGraphic(hbox);
                         }
@@ -710,12 +672,47 @@ public class DashboardUser {
         return listContainer;
     }
 
-    private void showBorrowReturnDialog(Book book) {
-        if (book.isBorrowed()) {
-            showAlert("Buku ini sedang dipinjam dan tidak tersedia saat ini.");
-            return;
-        }
+    private void borrowBook(BorrowBookRequest bookRequest) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
 
+            String requestBody = mapper.writeValueAsString(bookRequest);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/borrow"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            BorrowBookResponse bookResponse = mapper.readValue(response.body(), BorrowBookResponse.class);
+
+            if(response.statusCode() == 200) {
+                showAlert("Book reserved successfully.");
+                return;
+            }
+
+            if(response.statusCode() == 400 && Objects.equals(bookResponse.message, "Book already borrowed")) {
+                showAlert("You have already borrowed this book.");
+                return;
+            }
+
+            if(response.statusCode() == 400 && Objects.equals(bookResponse.message, "Not enough quantity")) {
+                showAlert("This book has no quantity to borrow.");
+                return;
+            }
+
+            showAlert("Internal server error!");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void showBorrowReturnDialog(BookData book) {
         TextInputDialog dialog = new TextInputDialog("14");
         dialog.setTitle("Pinjam Buku");
         dialog.setHeaderText("Pinjam buku: " + book.getTitle());
@@ -730,11 +727,10 @@ public class DashboardUser {
                     showAlert("Masukkan angka antara 1 hingga 60.");
                     return;
                 }
-                book.setBorrowed(true);
-                book.setBorrowDate(LocalDate.now());
-                book.setReturnDate(LocalDate.now().plusDays(days));
-                borrowedBooks.add(book);
-                addLoanHistoryRecord(book, LocalDate.now(), LocalDate.now().plusDays(days));
+
+                User user = SessionManager.getInstance().getUser();
+                BorrowBookRequest bookRequest = new BorrowBookRequest(user.getId(), book.getId(), days);
+                borrowBook(bookRequest);
                 refreshUI();
             } catch (NumberFormatException e) {
                 showAlert("Input tidak valid. Masukkan angka.");
@@ -742,12 +738,69 @@ public class DashboardUser {
         });
     }
 
-    private void addLoanHistoryRecord(Book book, LocalDate borrowDate, LocalDate returnDate) {
-        LoanRecord record = new LoanRecord(book.getTitle(), borrowDate, returnDate);
-        loanHistory.add(record);
+    private BookData fetchBookById(long bookId){
+        try {
+            User user = SessionManager.getInstance().getUser();
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/book/id/" + bookId))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.findAndRegisterModules();
+            System.out.println(response.body());
+
+            BookResponse bookResponse = mapper.readValue(response.body(), BookResponse.class);
+            if(bookResponse.status == 200){
+                BookData book = bookResponse.data.get(0);
+                return book;
+            }
+
+            showAlert("Internal server error.");
+            return null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void fetchLoanHistory() {
+        loanHistory.clear();
+
+        try {
+            User user = SessionManager.getInstance().getUser();
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/borrow/" + user.getId()))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.findAndRegisterModules();
+            System.out.println(response.body());
+
+            BorrowedBookResponse borrowedResponse = mapper.readValue(response.body(), BorrowedBookResponse.class);
+            for(BorrowedBook tx : borrowedResponse.data){
+                BookData book = fetchBookById(tx.getBookId());
+                LocalDate borrowDate = LocalDate.parse(tx.getCreatedAt().split("T")[0]);
+                LocalDate returnDate = LocalDate.parse(tx.getReturnDate());
+
+                loanHistory.add(new LoanRecord(book.getTitle(), borrowDate, returnDate));
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void loadLoanHistoryPage() {
+        fetchLoanHistory();
         VBox container = createContentContainer();
 
         Label title = new Label("Loan History");
@@ -808,53 +861,13 @@ public class DashboardUser {
         }
     }
 
-    private String createBorrowInfoText(Book book) {
-        LocalDate borrowDate = book.getBorrowDate();
-        LocalDate returnDate = book.getReturnDate();
-        if (borrowDate == null || returnDate == null) {
-            borrowDate = LocalDate.now().minusDays(5);
-            returnDate = borrowDate.plusDays(14);
-            book.setBorrowDate(borrowDate);
-            book.setReturnDate(returnDate);
-        }
+    private String createBorrowInfoText(BorrowedBook book) {
+        LocalDate borrowDate = LocalDate.parse(book.getCreatedAt().split("T")[0]);
+        LocalDate returnDate = LocalDate.parse(book.getReturnDate());
+
         long daysBorrowed = ChronoUnit.DAYS.between(borrowDate, LocalDate.now());
         return "Borrowed " + daysBorrowed + (daysBorrowed == 1 ? " day ago. " : " days ago. ") +
                 "Return by " + returnDate.toString();
-    }
-
-    public static class Book {
-        private String title;
-        private String description;
-        private String genre;
-        private boolean favourite;
-        private boolean borrowed;
-        private LocalDate borrowDate;
-        private LocalDate returnDate;
-        private String coverUrl;
-
-        public Book(String title, String description, String genre, boolean favourite, String coverUrl) {
-            this.title = title;
-            this.description = description;
-            this.genre = genre;
-            this.favourite = favourite;
-            this.coverUrl = coverUrl;
-            this.borrowed = false;
-            this.borrowDate = null;
-            this.returnDate = null;
-        }
-
-        public String getTitle() { return title; }
-        public String getDescription() { return description; }
-        public String getGenre() { return genre; }
-        public boolean isFavourite() { return favourite; }
-        public void setFavourite(boolean favourite) { this.favourite = favourite; }
-        public String getCoverUrl() { return coverUrl; }
-        public boolean isBorrowed() { return borrowed; }
-        public void setBorrowed(boolean borrowed) { this.borrowed = borrowed; }
-        public LocalDate getBorrowDate() { return borrowDate; }
-        public void setBorrowDate(LocalDate borrowDate) { this.borrowDate = borrowDate; }
-        public LocalDate getReturnDate() { return returnDate; }
-        public void setReturnDate(LocalDate returnDate) { this.returnDate = returnDate; }
     }
 
     public static class LoanRecord {

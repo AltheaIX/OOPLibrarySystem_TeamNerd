@@ -1,6 +1,7 @@
 package GUI;
 
 import Utils.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.animation.TranslateTransition;
@@ -15,34 +16,29 @@ import javafx.scene.shape.Circle;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import dto.LoginRequest;
+import dto.LoginResponse;
+import model.User;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+import static App.Main.BASE_URL;
 
 public class LoginPage {
+    private static final String LOGIN_URL = BASE_URL + "/auth/login";
     private VBox root;
     private Stage stage;
 
-    // Dummy users
-    private final Map<String, String> userPasswords = new HashMap<>();
-    private final Map<String, String> userRoles = new HashMap<>();
-
     public LoginPage(Stage stage) {
         this.stage = stage;
-        initDummyUsers();
         createUI();
     }
 
     public VBox getView() {
         return root;
-    }
-
-    private void initDummyUsers() {
-        userPasswords.put("admin@example.com", "admin123");
-        userRoles.put("admin@example.com", "admin");
-
-        userPasswords.put("user@example.com", "user123");
-        userRoles.put("user@example.com", "user");
     }
 
     private void createUI() {
@@ -395,13 +391,45 @@ public class LoginPage {
         fadeOut.play();
     }
 
+    private boolean login(String email, String password){
+        try {
+            SessionManager session = SessionManager.getInstance();
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(new LoginRequest(email, password));
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(LOGIN_URL))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            LoginResponse loginResponse = mapper.readValue(response.body(), LoginResponse.class);
+
+            if (loginResponse.status == 200) {
+                session.setUser(loginResponse.data);
+                System.out.println(loginResponse.data.getFullName());
+                return true;
+            } else {
+                System.out.println(loginResponse.message);
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     private void loginAction(TextField emailField, PasswordField passwordField, Label messageLabel) {
         String email = emailField.getText().trim().toLowerCase();
         String password = passwordField.getText().trim();
 
         messageLabel.setText(""); // Clear previous message
 
-        if (userPasswords.containsKey(email) && userPasswords.get(email).equals(password)) {
+        if (login(email, password)) {
             // Success animation
             ScaleTransition successScale = new ScaleTransition(Duration.millis(200), messageLabel);
             successScale.setFromX(0);
@@ -419,7 +447,8 @@ public class LoginPage {
                 fadeOut.setFromValue(1);
                 fadeOut.setToValue(0);
                 fadeOut.setOnFinished(event -> {
-                    String role = userRoles.get(email);
+                    User user = SessionManager.getInstance().getUser();
+                    String role = user.getRole();
                     if ("admin".equals(role)) {
                         new DashboardAdmin().start(stage);
                     } else {

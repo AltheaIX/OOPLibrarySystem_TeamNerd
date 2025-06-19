@@ -2,6 +2,11 @@ package GUI;
 
 import Utils.FontLoader;
 import Utils.Theme;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dto.*;
+import javafx.beans.property.ReadOnlyListProperty;
+import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
@@ -21,12 +26,20 @@ import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.stream.Collectors;
 
 //library icon awesome jangan lupa add di project structure, ada di resource root
+import model.*;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.fontawesome5.FontAwesomeSolid;
+
+import static App.Main.BASE_URL;
 
 public class DashboardAdmin {
     private BorderPane root;
@@ -35,13 +48,11 @@ public class DashboardAdmin {
     private static final double MAX_CONTENT_WIDTH = 1200;
 
     // Dummy data for books
-    private ObservableList<Book> booksData = FXCollections.observableArrayList();
+    private ObservableList<BookData> booksData = FXCollections.observableArrayList();
     private ObservableList<User> usersData = FXCollections.observableArrayList();
     private ObservableList<Transaction> transactionsData = FXCollections.observableArrayList();
 
     public void start(Stage stage) {
-        initializeDummyData();
-
         root = new BorderPane();
         sidebar = createSidebar(stage);
         contentPane = new StackPane();
@@ -57,37 +68,6 @@ public class DashboardAdmin {
         stage.show();
 
         loadDashboardContent();
-    }
-
-    private void initializeDummyData() {
-        // Initialize books data
-        booksData.addAll(
-                new Book("B001", "To Kill a Mockingbird", "Harper Lee", "Fiction", "Available", LocalDate.now()),
-                new Book("B002", "1984", "George Orwell", "Fiction", "Borrowed", LocalDate.now().minusDays(5)),
-                new Book("B003", "Pride and Prejudice", "Jane Austen", "Romance", "Available", LocalDate.now()),
-                new Book("B004", "The Catcher in the Rye", "J.D. Salinger", "Fiction", "Overdue", LocalDate.now().minusDays(10)),
-                new Book("B005", "Lord of the Flies", "William Golding", "Fiction", "Borrowed", LocalDate.now().minusDays(3)),
-                new Book("B006", "The Great Gatsby", "F. Scott Fitzgerald", "Fiction", "Available", LocalDate.now()),
-                new Book("B007", "Moby Dick", "Herman Melville", "Adventure", "Overdue", LocalDate.now().minusDays(12)),
-                new Book("B008", "War and Peace", "Leo Tolstoy", "Historical", "Available", LocalDate.now())
-        );
-
-        // Initialize users data
-        usersData.addAll(
-                new User("U001", "John Doe", "john@email.com", "Active", 2),
-                new User("U002", "Jane Smith", "jane@email.com", "Active", 1),
-                new User("U003", "Bob Johnson", "bob@email.com", "Inactive", 0),
-                new User("U004", "Alice Brown", "alice@email.com", "Active", 3),
-                new User("U005", "Charlie Wilson", "charlie@email.com", "Active", 1)
-        );
-
-        // Initialize transactions data
-        transactionsData.addAll(
-                new Transaction("T001", "U001", "B002", LocalDate.now().minusDays(5), LocalDate.now().plusDays(9), "Active"),
-                new Transaction("T002", "U004", "B004", LocalDate.now().minusDays(10), LocalDate.now().minusDays(3), "Overdue"),
-                new Transaction("T003", "U002", "B005", LocalDate.now().minusDays(3), LocalDate.now().plusDays(11), "Active"),
-                new Transaction("T004", "U001", "B007", LocalDate.now().minusDays(12), LocalDate.now().minusDays(5), "Overdue")
-        );
     }
 
     private void applyThemeStyles() {
@@ -120,7 +100,7 @@ public class DashboardAdmin {
         Button booksBtn = createNavButton("Books", FontAwesomeSolid.BOOK, this::loadBooksContent);
         Button usersBtn = createNavButton("Users", FontAwesomeSolid.USERS, this::loadUsersContent);
         Button transactionsBtn = createNavButton("Transactions", FontAwesomeSolid.FILE_ALT, this::loadTransactionsContent);
-        Button reportsBtn = createNavButton("Reports", FontAwesomeSolid.CHART_BAR, this::loadReportsContent);
+        // Button reportsBtn = createNavButton("Reports", FontAwesomeSolid.CHART_BAR, this::loadReportsContent);
         Button settingsBtn = createNavButton("Settings", FontAwesomeSolid.COG, this::loadSettingsContent);
         Button logoutBtn = createNavButton("Logout", FontAwesomeSolid.SIGN_OUT_ALT, () -> {
             LoginPage loginPage = new LoginPage(stage);
@@ -128,7 +108,7 @@ public class DashboardAdmin {
         });
 
 
-        box.getChildren().addAll(dashboardBtn, booksBtn, usersBtn, transactionsBtn, reportsBtn, settingsBtn, logoutBtn);
+        box.getChildren().addAll(dashboardBtn, booksBtn, usersBtn, transactionsBtn, settingsBtn, logoutBtn);
         updateSidebarStyles(box);
         return box;
     }
@@ -173,6 +153,10 @@ public class DashboardAdmin {
 
     // === DASHBOARD CONTENT ===
     private void loadDashboardContent() {
+        fetchTransactions();
+        fetchBook();
+        fetchUsers();
+
         VBox container = createContentContainer();
         Label title = createTitleLabel("Library Dashboard");
 
@@ -181,26 +165,16 @@ public class DashboardAdmin {
         metrics.setPadding(new Insets(40, 0, 48, 0));
 
         long totalBooks = booksData.size();
-        long borrowedBooks = booksData.stream().filter(b -> "Borrowed".equals(b.getStatus())).count();
-        long overdueBooks = booksData.stream().filter(b -> "Overdue".equals(b.getStatus())).count();
         long totalUsers = usersData.size();
-        long totalFines = calculateTotalFines();
+        long totalTransactions = transactionsData.size();
 
         metrics.getChildren().addAll(
                 createMetricCard("Total Books", String.valueOf(totalBooks)),
-                createMetricCard("Borrowed Books", String.valueOf(borrowedBooks)),
-                createMetricCard("Overdue Books", String.valueOf(overdueBooks))
-        );
-
-        HBox metrics2 = new HBox(24);
-        metrics2.setPadding(new Insets(0, 0, 48, 0));
-        metrics2.getChildren().addAll(
                 createMetricCard("Total Users", String.valueOf(totalUsers)),
-                createMetricCard("Library Visitors", "1,234"),
-                createMetricCard("Total Fines", "Rp " + String.format("%,d", totalFines))
+                createMetricCard("Total Transactions", String.valueOf(totalTransactions))
         );
 
-        container.getChildren().addAll(title, metrics, metrics2);
+        container.getChildren().addAll(title, metrics);
         contentPane.getChildren().setAll(container);
     }
 
@@ -208,7 +182,7 @@ public class DashboardAdmin {
         return transactionsData.stream()
                 .filter(t -> "Overdue".equals(t.getStatus()))
                 .mapToLong(t -> {
-                    long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - t.getDueDate().toEpochDay());
+                    long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - LocalDate.parse(t.getReturnDate()).toEpochDay());
                     return daysOverdue * 500; // 500 rupiah per day
                 })
                 .sum();
@@ -252,8 +226,35 @@ public class DashboardAdmin {
         return container;
     }
 
+    private void fetchBook(){
+        booksData.clear();
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/book"))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            BookResponse bookResponse = mapper.readValue(response.body(), BookResponse.class);
+            for(BookData book : bookResponse.data){
+                booksData.add(book);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     // === BOOKS MANAGEMENT ===
     private void loadBooksContent() {
+        fetchBook();
+
         VBox container = createContentContainer();
         Label title = createTitleLabel("Books Management");
 
@@ -272,20 +273,19 @@ public class DashboardAdmin {
         actionButtons.getChildren().addAll(searchField, addBookBtn, refreshBtn);
 
         // Books table
-        TableView<Book> booksTable = createBooksTable();
+        TableView<BookData> booksTable = createBooksTable();
 
         // === Filter & Sort Setup ===
-        FilteredList<Book> filteredData = new FilteredList<>(booksData, b -> true);
+        FilteredList<BookData> filteredData = new FilteredList<>(booksData, b -> true);
         searchField.textProperty().addListener((obs, oldVal, newVal) -> {
             filteredData.setPredicate(book -> {
                 if (newVal == null || newVal.isEmpty()) return true;
                 String lower = newVal.toLowerCase();
                 return book.getTitle().toLowerCase().contains(lower) ||
-                        book.getAuthor().toLowerCase().contains(lower) ||
-                        book.getGenre().toLowerCase().contains(lower);
+                        book.getAuthor().toLowerCase().contains(lower);
             });
         });
-        SortedList<Book> sortedData = new SortedList<>(filteredData);
+        SortedList<BookData> sortedData = new SortedList<>(filteredData);
         sortedData.comparatorProperty().bind(booksTable.comparatorProperty());
         booksTable.setItems(sortedData);
         // === END Filter & Sort Setup ===
@@ -294,63 +294,32 @@ public class DashboardAdmin {
         container.getChildren().addAll(title, actionButtons, tableContainer);
         contentPane.getChildren().setAll(container);
     }
-    private TableView<Book> createBooksTable() {
-        TableView<Book> table = new TableView<>();
+    private TableView<BookData> createBooksTable() {
+        TableView<BookData> table = new TableView<>();
         table.setItems(booksData);
         table.setPrefHeight(500);
 
-        TableColumn<Book, String> idCol = new TableColumn<>("Book ID");
+        TableColumn<BookData, String> idCol = new TableColumn<>("Book ID");
         idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
         idCol.setPrefWidth(80);
 
-        TableColumn<Book, String> titleCol = new TableColumn<>("Title");
+        TableColumn<BookData, String> isbnCol = new TableColumn<>("Isbn");
+        isbnCol.setCellValueFactory(new PropertyValueFactory<>("isbn"));
+        isbnCol.setPrefWidth(100);
+
+        TableColumn<BookData, String> titleCol = new TableColumn<>("Title");
         titleCol.setCellValueFactory(new PropertyValueFactory<>("title"));
         titleCol.setPrefWidth(200);
 
-        TableColumn<Book, String> authorCol = new TableColumn<>("Author");
+        TableColumn<BookData, String> authorCol = new TableColumn<>("Author");
         authorCol.setCellValueFactory(new PropertyValueFactory<>("author"));
         authorCol.setPrefWidth(150);
 
-        TableColumn<Book, String> genreCol = new TableColumn<>("Genre");
-        genreCol.setCellValueFactory(new PropertyValueFactory<>("genre"));
-        genreCol.setPrefWidth(100);
+        TableColumn<BookData, String> quantityCol = new TableColumn<>("Quantity");
+        quantityCol.setCellValueFactory(new PropertyValueFactory<>("quantity"));
+        quantityCol.setPrefWidth(100);
 
-        TableColumn<Book, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
-        statusCol.setPrefWidth(100);
-
-        // Custom cell factory for status column to show colored status
-        statusCol.setCellFactory(column -> new TableCell<Book, String>() {
-            @Override
-            protected void updateItem(String status, boolean empty) {
-                super.updateItem(status, empty);
-                if (empty || status == null) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(status);
-                    switch (status) {
-                        case "Available":
-                            setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
-                            break;
-                        case "Borrowed":
-                            setStyle("-fx-text-fill: #2563eb; -fx-font-weight: bold;");
-                            break;
-                        case "Overdue":
-                            setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
-                            break;
-                        default:
-                            setStyle("");
-                    }
-                }
-            }
-        });
-
-        TableColumn<Book, String> dateCol = new TableColumn<>("Date Added");
-        dateCol.setCellValueFactory(new PropertyValueFactory<>("dateAdded"));
-        dateCol.setPrefWidth(120);
-
-        TableColumn<Book, Void> actionCol = new TableColumn<>("Actions");
+        TableColumn<BookData, Void> actionCol = new TableColumn<>("Actions");
         actionCol.setPrefWidth(120);
         actionCol.setCellFactory(param -> new TableCell<>() {
             private final Button editBtn = new Button("Edit");
@@ -362,12 +331,12 @@ public class DashboardAdmin {
                 deleteBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-padding: 4 8; -fx-background-radius: 4;");
 
                 editBtn.setOnAction(e -> {
-                    Book book = getTableView().getItems().get(getIndex());
+                    BookData book = getTableView().getItems().get(getIndex());
                     showEditBookDialog(book);
                 });
 
                 deleteBtn.setOnAction(e -> {
-                    Book book = getTableView().getItems().get(getIndex());
+                    BookData book = getTableView().getItems().get(getIndex());
                     showDeleteConfirmation(book);
                 });
             }
@@ -383,8 +352,33 @@ public class DashboardAdmin {
             }
         });
 
-        table.getColumns().addAll(idCol, titleCol, authorCol, genreCol, statusCol, dateCol, actionCol);
+        table.getColumns().addAll(idCol, isbnCol, titleCol, authorCol, quantityCol, actionCol);
         return table;
+    }
+
+    private void fetchUsers(){
+        usersData.clear();
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/users"))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            UserResponse userResponse = mapper.readValue(response.body(), UserResponse.class);
+            for(User user : userResponse.data){
+                usersData.add(user);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // === USERS MANAGEMENT ===
@@ -392,6 +386,7 @@ public class DashboardAdmin {
     private ObservableList<User> filteredUsersData = FXCollections.observableArrayList();
 
     private void loadUsersContent() {
+        fetchUsers();
         VBox container = createContentContainer();
         Label title = createTitleLabel("Users Management");
 
@@ -422,14 +417,9 @@ public class DashboardAdmin {
 
         // User statistics
         HBox userStats = new HBox(24);
-        userStats.setPadding(new Insets(0, 0, 32, 0));
+        userStats.setPadding(new Insets(0, 0, 32, 0));;
 
-        long activeUsers = usersData.stream().filter(u -> "Active".equals(u.getStatus())).count();
-        long inactiveUsers = usersData.stream().filter(u -> "Inactive".equals(u.getStatus())).count();
-
-        userStats.getChildren().addAll(
-                createMiniStatCard("Active Users", String.valueOf(activeUsers)),
-                createMiniStatCard("Inactive Users", String.valueOf(inactiveUsers)),
+        userStats.getChildren().add(
                 createMiniStatCard("Total Users", String.valueOf(usersData.size()))
         );
 
@@ -452,44 +442,16 @@ public class DashboardAdmin {
         idCol.setPrefWidth(80);
 
         TableColumn<User, String> nameCol = new TableColumn<>("Name");
-        nameCol.setCellValueFactory(new PropertyValueFactory<>("name"));
+        nameCol.setCellValueFactory(new PropertyValueFactory<>("fullName"));
         nameCol.setPrefWidth(200);
 
         TableColumn<User, String> emailCol = new TableColumn<>("Email");
         emailCol.setCellValueFactory(new PropertyValueFactory<>("email"));
         emailCol.setPrefWidth(250);
 
-        TableColumn<User, String> statusCol = new TableColumn<>("Status");
-        statusCol.setCellValueFactory(new PropertyValueFactory<>("status"));
-        statusCol.setPrefWidth(100);
-
-        // Custom cell factory for status column to show colored status
-        statusCol.setCellFactory(column -> new TableCell<User, String>() {
-            @Override
-            protected void updateItem(String status, boolean empty) {
-                super.updateItem(status, empty);
-                if (empty || status == null) {
-                    setText(null);
-                    setStyle("");
-                } else {
-                    setText(status);
-                    switch (status) {
-                        case "Active":
-                            setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
-                            break;
-                        case "Inactive":
-                            setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
-                            break;
-                        default:
-                            setStyle("");
-                    }
-                }
-            }
-        });
-
-        TableColumn<User, Integer> booksCol = new TableColumn<>("Books Borrowed");
-        booksCol.setCellValueFactory(new PropertyValueFactory<>("booksBorrowed"));
-        booksCol.setPrefWidth(120);
+        TableColumn<User, String> majorCol = new TableColumn<>("Major");
+        majorCol.setCellValueFactory(new PropertyValueFactory<>("major"));
+        majorCol.setPrefWidth(150);
 
         TableColumn<User, Void> actionCol = new TableColumn<>("Actions");
         actionCol.setPrefWidth(120);
@@ -524,12 +486,39 @@ public class DashboardAdmin {
             }
         });
 
-        table.getColumns().addAll(idCol, nameCol, emailCol, statusCol, booksCol, actionCol);
+        table.getColumns().addAll(idCol, nameCol, emailCol, majorCol, actionCol);
         return table;
+    }
+
+    private void fetchTransactions(){
+        transactionsData.clear();
+
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/transaction"))
+                    .header("Content-Type", "application/json")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            TransactionResponse txResp = mapper.readValue(response.body(), TransactionResponse.class);
+            for(Transaction tx : txResp.data){
+                transactionsData.add(tx);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     // === TRANSACTIONS MANAGEMENT ===
     private void loadTransactionsContent() {
+        fetchTransactions();
+
         VBox container = createContentContainer();
         Label title = createTitleLabel("Transactions & Fines");
 
@@ -538,7 +527,6 @@ public class DashboardAdmin {
         actionButtons.setPadding(new Insets(0, 0, 24, 0));
         actionButtons.setAlignment(Pos.CENTER_LEFT);
 
-        Button addTransactionBtn = createActionButton("+ Add Transaction", this::showAddTransactionDialog);
         Button refreshBtn = createActionButtonWithIcon("Refresh", FontAwesomeSolid.SYNC_ALT, this::loadTransactionsContent);
 
         // Search field
@@ -555,20 +543,18 @@ public class DashboardAdmin {
             filterTransactionsByUserId("");
         });
 
-        actionButtons.getChildren().addAll(addTransactionBtn, refreshBtn,
+        actionButtons.getChildren().addAll(refreshBtn,
                 new Label("  "), searchField, searchBtn, clearBtn);
 
         // Fine statistics
         HBox fineStats = new HBox(24);
         fineStats.setPadding(new Insets(0, 0, 32, 0));
 
-        long overdueCount = transactionsData.stream().filter(t -> "Overdue".equals(t.getStatus())).count();
         long totalFines = calculateTotalFines();
 
         fineStats.getChildren().addAll(
-                createMiniStatCard("Active Loans", String.valueOf(transactionsData.stream().filter(t -> "Active".equals(t.getStatus())).count())),
-                createMiniStatCard("Overdue Loans", String.valueOf(overdueCount)),
-                createMiniStatCard("Total Fines", "Rp " + String.format("%,d", totalFines))
+                createMiniStatCard("Active Loans", String.valueOf(transactionsData.stream().filter(t -> "borrowed".equals(t.getStatus())).count())),
+                createMiniStatCard("Returned Loans", String.valueOf(transactionsData.stream().filter(t -> "returned".equals(t.getStatus())).count()))
         );
 
         // Transactions table
@@ -601,11 +587,15 @@ public class DashboardAdmin {
         bookCol.setPrefWidth(80);
 
         TableColumn<Transaction, LocalDate> borrowCol = new TableColumn<>("Borrow Date");
-        borrowCol.setCellValueFactory(new PropertyValueFactory<>("borrowDate"));
+        borrowCol.setCellValueFactory(cellData -> {
+            String createdAt = cellData.getValue().getCreatedAt().split("T")[0];
+            LocalDate date = LocalDate.parse(createdAt);
+            return new ReadOnlyObjectWrapper<>(date);
+        });
         borrowCol.setPrefWidth(120);
 
         TableColumn<Transaction, LocalDate> dueCol = new TableColumn<>("Due Date");
-        dueCol.setCellValueFactory(new PropertyValueFactory<>("dueDate"));
+        dueCol.setCellValueFactory(new PropertyValueFactory<>("returnDate"));
         dueCol.setPrefWidth(120);
 
         TableColumn<Transaction, String> statusCol = new TableColumn<>("Status");
@@ -621,15 +611,25 @@ public class DashboardAdmin {
                     setText(null);
                     setStyle("");
                 } else {
-                    setText(status);
+                    setText(status.substring(0,1).toUpperCase() + status.substring(1).toLowerCase());
+
+                    Transaction transaction = getTableView().getItems().get(getIndex());
+                    LocalDate returnDate = LocalDate.parse(transaction.getReturnDate());
+
+                    if(status.equals("borrowed")){
+                        if(returnDate.isBefore(LocalDate.now())){
+                            transaction.setStatus("Overdue");
+                            setText("Overdue");
+                            setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+                            return;
+                        }
+                    }
+
                     switch (status) {
-                        case "Active":
+                        case "borrowed":
                             setStyle("-fx-text-fill: #16a34a; -fx-font-weight: bold;");
                             break;
-                        case "Overdue":
-                            setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
-                            break;
-                        case "Returned":
+                        case "returned":
                             setStyle("-fx-text-fill: #2563eb; -fx-font-weight: bold;");
                             break;
                         default:
@@ -651,7 +651,7 @@ public class DashboardAdmin {
                 } else {
                     Transaction transaction = (Transaction) getTableRow().getItem();
                     if ("Overdue".equals(transaction.getStatus())) {
-                        long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - transaction.getDueDate().toEpochDay());
+                        long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - LocalDate.parse(transaction.getReturnDate()).toEpochDay());
                         long fine = daysOverdue * 500;
                         setText("Rp " + String.format("%,d", fine));
                         setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
@@ -745,8 +745,8 @@ public class DashboardAdmin {
         DatePicker borrowDatePicker = new DatePicker(LocalDate.now());
         DatePicker dueDatePicker = new DatePicker(LocalDate.now().plusDays(14));
         ComboBox<String> statusField = new ComboBox<>();
-        statusField.getItems().addAll("Active", "Overdue", "Returned");
-        statusField.setValue("Active");
+        statusField.getItems().addAll("Borrowed", "Overdue", "Returned");
+        statusField.setValue("Borrowed");
 
         grid.add(new Label("User ID:"), 0, 0);
         grid.add(userIdField, 1, 0);
@@ -763,9 +763,9 @@ public class DashboardAdmin {
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == addButtonType) {
-                String newId = "T" + String.format("%03d", transactionsData.size() + 1);
-                return new Transaction(newId, userIdField.getText(), bookIdField.getText(),
-                        borrowDatePicker.getValue(), dueDatePicker.getValue(), statusField.getValue());
+//                String newId = "T" + String.format("%03d", transactionsData.size() + 1);
+//                return new Transaction(newId, userIdField.getText(), bookIdField.getText(),
+//                        borrowDatePicker.getValue(), dueDatePicker.getValue(), statusField.getValue());
             }
             return null;
         });
@@ -775,6 +775,35 @@ public class DashboardAdmin {
             filteredTransactionsData.setAll(transactionsData);
             showAlert("Success", "Transaction added successfully!");
         });
+    }
+
+    private void updateTransaction(long id, UpdateTransactionRequest txUpdate){
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(txUpdate);
+            System.out.println("requestBody: " + requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/transaction/" + id))
+                    .header("Content-Type", "application/json")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if(response.statusCode() == 200) {
+                showAlert("Success", "Transaction updated successfully!");
+                return;
+            } else {
+                showAlert("Error", "Transaction update failed!");
+                return;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return;
+        }
     }
 
     private void showEditTransactionDialog(Transaction transaction) {
@@ -792,33 +821,28 @@ public class DashboardAdmin {
 
         TextField userIdField = new TextField(transaction.getUserId());
         TextField bookIdField = new TextField(transaction.getBookId());
-        DatePicker borrowDatePicker = new DatePicker(transaction.getBorrowDate());
-        DatePicker dueDatePicker = new DatePicker(transaction.getDueDate());
+        DatePicker dueDatePicker = new DatePicker(LocalDate.parse(transaction.getReturnDate()));
         ComboBox<String> statusField = new ComboBox<>();
-        statusField.getItems().addAll("Active", "Overdue", "Returned");
-        statusField.setValue(transaction.getStatus());
+        statusField.getItems().addAll("Borrowed", "Returned");
+        statusField.setValue(transaction.getStatus().substring(0,1).toUpperCase() + transaction.getStatus().substring(1).toLowerCase());
 
         grid.add(new Label("User ID:"), 0, 0);
         grid.add(userIdField, 1, 0);
         grid.add(new Label("Book ID:"), 0, 1);
         grid.add(bookIdField, 1, 1);
-        grid.add(new Label("Borrow Date:"), 0, 2);
-        grid.add(borrowDatePicker, 1, 2);
-        grid.add(new Label("Due Date:"), 0, 3);
-        grid.add(dueDatePicker, 1, 3);
-        grid.add(new Label("Status:"), 0, 4);
-        grid.add(statusField, 1, 4);
+        grid.add(new Label("Due Date:"), 0, 2);
+        grid.add(dueDatePicker, 1, 2);
+        grid.add(new Label("Status:"), 0, 3);
+        grid.add(statusField, 1, 3);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                transaction.setUserId(userIdField.getText());
-                transaction.setBookId(bookIdField.getText());
-                transaction.setBorrowDate(borrowDatePicker.getValue());
-                transaction.setDueDate(dueDatePicker.getValue());
-                transaction.setStatus(statusField.getValue());
-                return transaction;
+                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+                UpdateTransactionRequest updateTransactionRequest = new UpdateTransactionRequest(Long.parseLong(userIdField.getText()), Long.parseLong(bookIdField.getText()), dueDatePicker.getValue().format(formatter), statusField.getValue());
+                updateTransaction(Long.parseLong(transaction.getId()), updateTransactionRequest);
+                loadTransactionsContent();
             }
             return null;
         });
@@ -831,6 +855,33 @@ public class DashboardAdmin {
         });
     }
 
+    private boolean deleteTransaction(long id) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/transaction/" + id))
+                    .header("Content-Type", "application/json")
+                    .DELETE()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            DeleteBookResponse deleteResp = mapper.readValue(response.body(), DeleteBookResponse.class);
+
+            if (deleteResp.status == 200){
+                return true;
+            } else {
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     private void showDeleteTransactionConfirmation(Transaction transaction) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Delete Transaction");
@@ -841,12 +892,42 @@ public class DashboardAdmin {
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                transactionsData.remove(transaction);
-                filteredTransactionsData.setAll(transactionsData);
-                showAlert("Success", "Transaction deleted successfully!");
+                if(deleteTransaction(Long.parseLong(transaction.getId()))){
+                    showAlert("Success", "Transaction deleted successfully!");
+                } else {
+                    showAlert("Error", "Transaction could not be deleted!");
+                }
                 loadTransactionsContent(); // Refresh to update statistics
             }
         });
+    }
+
+    private void returnBook(ReturnBookRequest returnBookRequest) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(returnBookRequest);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/return"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            mapper.findAndRegisterModules();
+            System.out.println(response.body());
+
+            if(response.statusCode() == 200) {
+                showAlert("Success", "Fine payment recorded successfully!\nTransaction status updated to 'Returned'.");
+                return;
+            }
+
+            showAlert("Error", "Internal server error");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private void payFine(Transaction transaction) {
@@ -855,7 +936,7 @@ public class DashboardAdmin {
             return;
         }
 
-        long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - transaction.getDueDate().toEpochDay());
+        long daysOverdue = Math.max(0, LocalDate.now().toEpochDay() - LocalDate.parse(transaction.getReturnDate()).toEpochDay());
         long fine = daysOverdue * 500;
 
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
@@ -869,9 +950,8 @@ public class DashboardAdmin {
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
                 // Change status to "Returned" to indicate fine is paid
-                transaction.setStatus("Returned");
-                transactionsTable.refresh();
-                showAlert("Success", "Fine payment recorded successfully!\nTransaction status updated to 'Returned'.");
+                ReturnBookRequest returnBookRequest = new ReturnBookRequest(Integer.parseInt(transaction.getId()));
+                returnBook(returnBookRequest);
                 loadTransactionsContent(); // Refresh to update statistics
             }
         });
@@ -1026,8 +1106,37 @@ public class DashboardAdmin {
         return container;
     }
 
+    private boolean addBook(CreateBookRequest newBook){
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(newBook);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/book"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println(response.body());
+
+            if(response.statusCode() == 200) {
+                showAlert("Success", "Book created successfully!");
+                return true;
+            } else {
+                showAlert("Error", "Book created failed!");
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
     private void showAddBookDialog() {
-        Dialog<Book> dialog = new Dialog<>();
+        Dialog<BookData> dialog = new Dialog<>();
         dialog.setTitle("Add New Book");
         dialog.setHeaderText("Enter book details");
 
@@ -1039,26 +1148,27 @@ public class DashboardAdmin {
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
+        TextField isbnField = new TextField();
         TextField titleField = new TextField();
         TextField authorField = new TextField();
-        ComboBox<String> genreField = new ComboBox<>();
-        genreField.getItems().addAll("Fiction", "Non-Fiction", "Romance", "Adventure", "Historical", "Science", "Biography");
-        genreField.setValue("Fiction");
+        TextField quantityField = new TextField(String.valueOf(0));
 
-        grid.add(new Label("Title:"), 0, 0);
-        grid.add(titleField, 1, 0);
-        grid.add(new Label("Author:"), 0, 1);
-        grid.add(authorField, 1, 1);
-        grid.add(new Label("Genre:"), 0, 2);
-        grid.add(genreField, 1, 2);
+        grid.add(new Label("Isbn:"), 0, 0);
+        grid.add(isbnField, 1, 0);
+        grid.add(new Label("Title:"), 0, 1);
+        grid.add(titleField, 1, 1);
+        grid.add(new Label("Author:"), 0, 2);
+        grid.add(authorField, 1, 2);
+        grid.add(new Label("Quantity:"), 0, 3);
+        grid.add(quantityField, 1, 3);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == addButtonType) {
-                String newId = "B" + String.format("%03d", booksData.size() + 1);
-                return new Book(newId, titleField.getText(), authorField.getText(),
-                        genreField.getValue(), "Available", LocalDate.now());
+                CreateBookRequest createBookRequest = new CreateBookRequest(authorField.getText(), titleField.getText(), isbnField.getText(), Long.parseLong(quantityField.getText()));
+                addBook(createBookRequest);
+                loadBooksContent();
             }
             return null;
         });
@@ -1069,8 +1179,36 @@ public class DashboardAdmin {
         });
     }
 
-    private void showEditBookDialog(Book book) {
-        Dialog<Book> dialog = new Dialog<>();
+    private boolean updateBook(long id, UpdateBookRequest bookUpdate){
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(bookUpdate);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/book/" + id))
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if(response.statusCode() == 200) {
+                showAlert("Success", "Book updated successfully!");
+                return true;
+            } else {
+                showAlert("Error", "Book update failed!");
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    private void showEditBookDialog(BookData book) {
+        Dialog<BookData> dialog = new Dialog<>();
         dialog.setTitle("Edit Book");
         dialog.setHeaderText("Edit book details");
 
@@ -1082,34 +1220,27 @@ public class DashboardAdmin {
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
+        TextField isbnField = new TextField(book.getIsbn());
         TextField titleField = new TextField(book.getTitle());
         TextField authorField = new TextField(book.getAuthor());
-        ComboBox<String> genreField = new ComboBox<>();
-        genreField.getItems().addAll("Fiction", "Non-Fiction", "Romance", "Adventure", "Historical", "Science", "Biography");
-        genreField.setValue(book.getGenre());
+        TextField quantityField = new TextField(String.valueOf(book.getQuantity()));
 
-        ComboBox<String> statusField = new ComboBox<>();
-        statusField.getItems().addAll("Available", "Borrowed", "Overdue");
-        statusField.setValue(book.getStatus());
-
-        grid.add(new Label("Title:"), 0, 0);
-        grid.add(titleField, 1, 0);
-        grid.add(new Label("Author:"), 0, 1);
-        grid.add(authorField, 1, 1);
-        grid.add(new Label("Genre:"), 0, 2);
-        grid.add(genreField, 1, 2);
-        grid.add(new Label("Status:"), 0, 3);
-        grid.add(statusField, 1, 3);
+        grid.add(new Label("Isbn:"), 0, 0);
+        grid.add(isbnField, 1, 0);
+        grid.add(new Label("Title:"), 0, 1);
+        grid.add(titleField, 1, 1);
+        grid.add(new Label("Author:"), 0, 2);
+        grid.add(authorField, 1, 2);
+        grid.add(new Label("Quantity:"), 0, 3);
+        grid.add(quantityField, 1, 3);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                book.setTitle(titleField.getText());
-                book.setAuthor(authorField.getText());
-                book.setGenre(genreField.getValue());
-                book.setStatus(statusField.getValue());
-                return book;
+                UpdateBookRequest bookRequest = new UpdateBookRequest(authorField.getText(), titleField.getText(), isbnField.getText(), Long.parseLong(quantityField.getText()));
+                updateBook(book.getId(), bookRequest);
+                loadBooksContent();
             }
             return null;
         });
@@ -1120,7 +1251,34 @@ public class DashboardAdmin {
         });
     }
 
-    private void showDeleteConfirmation(Book book) {
+    private boolean deleteBook(BookData book) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/book/" + book.getId()))
+                    .header("Content-Type", "application/json")
+                    .DELETE()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            DeleteBookResponse deleteResp = mapper.readValue(response.body(), DeleteBookResponse.class);
+
+            if (deleteResp.status == 200){
+                return true;
+            } else {
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    private void showDeleteConfirmation(BookData book) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Delete Book");
         alert.setHeaderText("Are you sure you want to delete this book?");
@@ -1128,8 +1286,12 @@ public class DashboardAdmin {
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                booksData.remove(book);
-                showAlert("Success", "Book deleted successfully!");
+                if(deleteBook(book)){
+                    showAlert("Success", "Book deleted successfully!");
+                    loadBooksContent();
+                } else {
+                    showAlert("Error", "Book could not be deleted!");
+                }
             }
         });
     }
@@ -1222,13 +1384,51 @@ public class DashboardAdmin {
     private void filterUsersByUserId(String userId) {
         if (userId == null || userId.trim().isEmpty()) {
             filteredUsersData.setAll(usersData);
-        } else {
+            return;
+        }
+
+        try {
+            long idToSearch = Long.parseLong(userId.trim());
+
             filteredUsersData.setAll(
                     usersData.stream()
-                            .filter(u -> u.getId().toLowerCase().contains(userId.toLowerCase()))
-                            .collect(java.util.stream.Collectors.toList())
+                            .filter(u -> u.getId() == idToSearch) // assumes getId() returns long or Long
+                            .collect(Collectors.toList())
             );
+        } catch (NumberFormatException e) {
+            // Optional: clear the list or show all if input is not a valid number
+            filteredUsersData.clear();
+            System.out.println("Invalid ID input: " + userId);
         }
+    }
+
+    private boolean addUser(CreateUserRequest newUser){
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(newUser);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/users"))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println(response.statusCode());
+
+            if(response.statusCode() == 200) {
+                showAlert("Success", "User created successfully!");
+                return true;
+            } else {
+                showAlert("Error", "User created failed!");
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     private void showAddUserDialog() {
@@ -1246,33 +1446,25 @@ public class DashboardAdmin {
 
         TextField nameField = new TextField();
         TextField emailField = new TextField();
-        ComboBox<String> statusField = new ComboBox<>();
-        statusField.getItems().addAll("Active", "Inactive");
-        statusField.setValue("Active");
-        TextField booksBorrowedField = new TextField("0");
+        TextField passwordField = new PasswordField();
+        TextField majorField = new TextField();
 
         grid.add(new Label("Name:"), 0, 0);
         grid.add(nameField, 1, 0);
         grid.add(new Label("Email:"), 0, 1);
         grid.add(emailField, 1, 1);
-        grid.add(new Label("Status:"), 0, 2);
-        grid.add(statusField, 1, 2);
-        grid.add(new Label("Books Borrowed:"), 0, 3);
-        grid.add(booksBorrowedField, 1, 3);
+        grid.add(new Label("Password:"), 0, 2);
+        grid.add(passwordField, 1, 2);
+        grid.add(new Label("Major:"), 0, 3);
+        grid.add(majorField, 1, 3);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == addButtonType) {
-                String newId = "U" + String.format("%03d", usersData.size() + 1);
-                try {
-                    int booksBorrowed = Integer.parseInt(booksBorrowedField.getText());
-                    return new User(newId, nameField.getText(), emailField.getText(),
-                            statusField.getValue(), booksBorrowed);
-                } catch (NumberFormatException e) {
-                    showAlert("Error", "Books Borrowed must be a valid number!");
-                    return null;
-                }
+                CreateUserRequest newUser = new CreateUserRequest(nameField.getText(), emailField.getText(), passwordField.getText(), majorField.getText());
+                addUser(newUser);
+                loadUsersContent();
             }
             return null;
         });
@@ -1284,6 +1476,35 @@ public class DashboardAdmin {
                 showAlert("Success", "User added successfully!");
             }
         });
+    }
+
+    private boolean updateUser(long id, UpdateUserRequest userUpdate){
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            ObjectMapper mapper = new ObjectMapper();
+
+            String requestBody = mapper.writeValueAsString(userUpdate);
+            System.out.println("requestBody: " + requestBody);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/users/" + id))
+                    .header("Content-Type", "application/json")
+                    .method("PATCH", HttpRequest.BodyPublishers.ofString(requestBody))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if(response.statusCode() == 200) {
+                showAlert("Success", "User updated successfully!");
+                return true;
+            } else {
+                showAlert("Error", "User update failed!");
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     private void showEditUserDialog(User user) {
@@ -1299,37 +1520,24 @@ public class DashboardAdmin {
         grid.setVgap(10);
         grid.setPadding(new Insets(20, 150, 10, 10));
 
-        TextField nameField = new TextField(user.getName());
+        TextField nameField = new TextField(user.getFullName());
         TextField emailField = new TextField(user.getEmail());
-        ComboBox<String> statusField = new ComboBox<>();
-        statusField.getItems().addAll("Active", "Inactive");
-        statusField.setValue(user.getStatus());
-        TextField booksBorrowedField = new TextField(String.valueOf(user.getBooksBorrowed()));
+        TextField majorField = new TextField(user.getMajor());
 
         grid.add(new Label("Name:"), 0, 0);
         grid.add(nameField, 1, 0);
         grid.add(new Label("Email:"), 0, 1);
         grid.add(emailField, 1, 1);
-        grid.add(new Label("Status:"), 0, 2);
-        grid.add(statusField, 1, 2);
-        grid.add(new Label("Books Borrowed:"), 0, 3);
-        grid.add(booksBorrowedField, 1, 3);
+        grid.add(new Label("Major:"), 0, 2);
+        grid.add(majorField, 1, 2);
 
         dialog.getDialogPane().setContent(grid);
 
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == saveButtonType) {
-                try {
-                    int booksBorrowed = Integer.parseInt(booksBorrowedField.getText());
-                    user.setName(nameField.getText());
-                    user.setEmail(emailField.getText());
-                    user.setStatus(statusField.getValue());
-                    user.setBooksBorrowed(booksBorrowed);
-                    return user;
-                } catch (NumberFormatException e) {
-                    showAlert("Error", "Books Borrowed must be a valid number!");
-                    return null;
-                }
+                UpdateUserRequest userRequest = new UpdateUserRequest(nameField.getText(), emailField.getText(), majorField.getText());
+                updateUser(user.getId(), userRequest);
+                loadUsersContent();
             }
             return null;
         });
@@ -1344,130 +1552,47 @@ public class DashboardAdmin {
         });
     }
 
+    private boolean deleteUser(User user) {
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(BASE_URL + "/users/" + user.getId()))
+                    .header("Content-Type", "application/json")
+                    .DELETE()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            ObjectMapper mapper = new ObjectMapper();
+            System.out.println(response.body());
+            mapper.findAndRegisterModules();
+            DeleteBookResponse deleteResp = mapper.readValue(response.body(), DeleteBookResponse.class);
+
+            if (deleteResp.status == 200){
+                return true;
+            } else {
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
     private void showDeleteUserConfirmation(User user) {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Delete User");
         alert.setHeaderText("Are you sure you want to delete this user?");
         alert.setContentText("User ID: " + user.getId() +
-                "\nName: " + user.getName() +
+                "\nName: " + user.getFullName() +
                 "\nEmail: " + user.getEmail());
 
         alert.showAndWait().ifPresent(response -> {
             if (response == ButtonType.OK) {
-                usersData.remove(user);
-                filteredUsersData.setAll(usersData);
+                deleteUser(user);
                 showAlert("Success", "User deleted successfully!");
                 loadUsersContent(); // Refresh to update statistics
             }
         });
-    }
-
-    // === DATA CLASSES ===
-    public static class Book {
-        private String id;
-        private String title;
-        private String author;
-        private String genre;
-        private String status;
-        private LocalDate dateAdded;
-
-        public Book(String id, String title, String author, String genre, String status, LocalDate dateAdded) {
-            this.id = id;
-            this.title = title;
-            this.author = author;
-            this.genre = genre;
-            this.status = status;
-            this.dateAdded = dateAdded;
-        }
-
-        // Getters and Setters
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-
-        public String getAuthor() { return author; }
-        public void setAuthor(String author) { this.author = author; }
-
-        public String getGenre() { return genre; }
-        public void setGenre(String genre) { this.genre = genre; }
-
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-
-        public String getDateAdded() {
-            return dateAdded.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        }
-        public void setDateAdded(LocalDate dateAdded) { this.dateAdded = dateAdded; }
-    }
-
-    public static class User {
-        private String id;
-        private String name;
-        private String email;
-        private String status;
-        private int booksBorrowed;
-
-        public User(String id, String name, String email, String status, int booksBorrowed) {
-            this.id = id;
-            this.name = name;
-            this.email = email;
-            this.status = status;
-            this.booksBorrowed = booksBorrowed;
-        }
-
-        // Getters and Setters
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-
-        public String getName() { return name; }
-        public void setName(String name) { this.name = name; }
-
-        public String getEmail() { return email; }
-        public void setEmail(String email) { this.email = email; }
-
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-
-        public int getBooksBorrowed() { return booksBorrowed; }
-        public void setBooksBorrowed(int booksBorrowed) { this.booksBorrowed = booksBorrowed; }
-    }
-
-    public static class Transaction {
-        private String id;
-        private String userId;
-        private String bookId;
-        private LocalDate borrowDate;
-        private LocalDate dueDate;
-        private String status;
-
-        public Transaction(String id, String userId, String bookId, LocalDate borrowDate, LocalDate dueDate, String status) {
-            this.id = id;
-            this.userId = userId;
-            this.bookId = bookId;
-            this.borrowDate = borrowDate;
-            this.dueDate = dueDate;
-            this.status = status;
-        }
-
-        // Getters and Setters
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
-
-        public String getBookId() { return bookId; }
-        public void setBookId(String bookId) { this.bookId = bookId; }
-
-        public LocalDate getBorrowDate() { return borrowDate; }
-        public void setBorrowDate(LocalDate borrowDate) { this.borrowDate = borrowDate; }
-
-        public LocalDate getDueDate() { return dueDate; }
-        public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
-
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
     }
 }

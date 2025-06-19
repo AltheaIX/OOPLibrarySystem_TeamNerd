@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
+@Transactional
 public class AuthRepositoryImpl implements AuthRepository {
     @PersistenceContext
     private EntityManager em;

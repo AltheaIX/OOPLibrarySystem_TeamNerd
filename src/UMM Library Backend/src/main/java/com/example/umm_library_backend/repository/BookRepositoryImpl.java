@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Repository
+@Transactional
 public class BookRepositoryImpl implements BookRepository {
     @PersistenceContext
     private EntityManager em;

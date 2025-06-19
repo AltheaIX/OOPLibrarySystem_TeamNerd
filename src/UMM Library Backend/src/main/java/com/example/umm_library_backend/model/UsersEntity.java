@@ -3,8 +3,11 @@ package com.example.umm_library_backend.model;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
 
 import javax.annotation.processing.Generated;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -24,15 +27,20 @@ public class UsersEntity {
     private String password;
     private String role;
 
+    @CreationTimestamp
+    @Column(name = "created_at", updatable = false)
+    private Timestamp createdAt;
+
     public UsersEntity(){
 
     }
 
-    public UsersEntity(String fullName, String major, String email, String password, String role) {
+    public UsersEntity(String fullName, String major, String email, String password, String role, Timestamp createdAt) {
         this.fullName = fullName;
         this.major = major;
         this.email = email;
         this.password = password;
         this.role = role;
+        this.createdAt = createdAt;
     }
 }

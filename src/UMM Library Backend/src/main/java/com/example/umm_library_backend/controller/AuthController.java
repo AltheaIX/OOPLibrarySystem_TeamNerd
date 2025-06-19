@@ -34,7 +34,7 @@ public class AuthController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new LoginResponse<>(401, "Invalid email or password"));
         }
 
-        AuthModel data = new AuthModel(user.getId(), user.getFullName(), user.getRole());
+        AuthModel data = new AuthModel(user.getId(), user.getEmail(), user.getFullName(), user.getRole(), user.getCreatedAt());
         return ResponseEntity.status(HttpStatus.OK).body(new LoginResponse<>(200, data));
     }
 
@@ -45,7 +45,7 @@ public class AuthController {
         }
 
         authServiceImpl.Register(registerRequest);
-        return ResponseEntity.status(HttpStatus.OK).body(new RegisterResponse<>(200, "Hello"));
+        return ResponseEntity.status(HttpStatus.OK).body(new RegisterResponse<>(200, "Register success"));
     }
 
     @GetMapping("/forgot")
@@ -65,5 +65,15 @@ public class AuthController {
         mailSender.send(message);
 
         return ResponseEntity.status(HttpStatus.OK).body(new ForgotResponse<>(200, "OK"));
+    }
+
+    @PatchMapping("/changepass")
+    public ResponseEntity<ChangePasswordResponse> changePassword(@RequestBody(required = false) ChangePasswordRequest changePasswordRequest) {
+        if(changePasswordRequest == null || changePasswordRequest.getOldPassword() == null || changePasswordRequest.getNewPassword() == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ChangePasswordResponse<>(400, "Bad request"));
+        }
+
+        authServiceImpl.ChangePassword(changePasswordRequest);
+        return ResponseEntity.status(HttpStatus.OK).body(new ChangePasswordResponse(200, "OK"));
     }
 }

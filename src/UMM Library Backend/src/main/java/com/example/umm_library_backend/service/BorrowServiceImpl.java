@@ -2,7 +2,9 @@ package com.example.umm_library_backend.service;
 
 import com.example.umm_library_backend.dto.book.CreateBookRequest;
 import com.example.umm_library_backend.dto.borrow_book.BorrowBookRequest;
+import com.example.umm_library_backend.exception.BookAlreadyBorrowedException;
 import com.example.umm_library_backend.exception.DataNotExistsException;
+import com.example.umm_library_backend.exception.NotEnoughQuantityException;
 import com.example.umm_library_backend.model.BooksEntity;
 import com.example.umm_library_backend.model.TransactionEntity;
 import com.example.umm_library_backend.model.UsersEntity;
@@ -32,11 +34,20 @@ public class BorrowServiceImpl {
             throw new DataNotExistsException("Book not found");
         }
 
+        if(isUserAlreadyBorrowBook(borrowBookRequest.getUserId(), borrowBookRequest.getBookId())) {
+            throw new BookAlreadyBorrowedException("Book already borrowed");
+        }
+
         BooksEntity book = booksEntity.get(0);
+
+        if(book.getQuantity() <= 0) {
+            throw new NotEnoughQuantityException("Not enough quantity");
+        }
+
         book.setQuantity(book.getQuantity() - 1);
         bookRepository.update(book);
 
-        LocalDate returnDate = LocalDate.now().plusDays(7);
+        LocalDate returnDate = LocalDate.now().plusDays(borrowBookRequest.getDays());
         TransactionEntity transactionEntity = new TransactionEntity();
         transactionEntity.setBookId(borrowBookRequest.getBookId());
         transactionEntity.setUserId(borrowBookRequest.getUserId());
@@ -45,5 +56,14 @@ public class BorrowServiceImpl {
         transactionRepository.save(transactionEntity);
 
         return transactionEntity;
+    }
+
+    public List<TransactionEntity> getBorrowedBooksByUserId(long userId) {
+        return transactionRepository.findBorrowedByUserId(userId);
+    }
+
+    public boolean isUserAlreadyBorrowBook(long userId, long bookId) {
+        List<TransactionEntity> transactions = transactionRepository.findBorrowedByUserAndBook(userId, bookId);
+        return !transactions.isEmpty();
     }
 }

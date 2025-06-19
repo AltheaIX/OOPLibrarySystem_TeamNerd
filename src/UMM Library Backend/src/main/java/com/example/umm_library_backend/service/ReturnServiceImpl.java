@@ -38,12 +38,14 @@ public class ReturnServiceImpl implements ReturnService {
 
     @Transactional
     public void returnBook(Long transactionId){
-        TransactionEntity transaction = transactionRepository.findById(transactionId);
-        if (transaction == null) {
+        List<TransactionEntity> transactions = transactionRepository.findById(transactionId);
+        TransactionEntity tx = transactions.get(0);
+
+        if (tx == null) {
             throw new DataNotExistsException("Transaction not found");
         }
 
-        List<BooksEntity> booksEntity = bookRepository.findById(transaction.getBookId());
+        List<BooksEntity> booksEntity = bookRepository.findById(tx.getBookId());
         if (booksEntity == null || booksEntity.size() == 0) {
             throw new DataNotExistsException("Book not found");
         }
@@ -52,7 +54,7 @@ public class ReturnServiceImpl implements ReturnService {
         book.setQuantity(book.getQuantity() + 1);
         bookRepository.update(book);
 
-        transaction.setStatus("returned");
-        transactionRepository.update(transaction);
+        tx.setStatus("returned");
+        transactionRepository.update(tx);
     }
 }
